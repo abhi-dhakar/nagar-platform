@@ -1,0 +1,80 @@
+/**
+ * Public namespaces (usernames and organization slugs) share one URL space with the Hub's own
+ * routes (`/login`, `/dashboard`, …) and with the API proxy prefixes (`/api`, `/git`). A user or
+ * organization called `git` or `login` would shadow those routes, so those names are never
+ * handed out. Existing lookups are not affected: this only guards new claims.
+ */
+const RESERVED = new Set([
+  // Hub routes and proxy prefixes
+  "api",
+  "git",
+  "login",
+  "logout",
+  "signin",
+  "sign-in",
+  "signup",
+  "sign-up",
+  "register",
+  "dashboard",
+  "new",
+  "settings",
+  "organizations",
+  "organization",
+  "orgs",
+  "notifications",
+  "profile",
+  "explore",
+  "search",
+  "me",
+  "user",
+  "users",
+  // Repository sub-routes
+  "issues",
+  "pulls",
+  "commits",
+  "branches",
+  "tags",
+  "blob",
+  "tree",
+  "raw",
+  "contents",
+  "compare",
+  "labels",
+  "webhooks",
+  "collaborators",
+  // Platform and role words that would invite impersonation
+  "admin",
+  "administrator",
+  "root",
+  "system",
+  "staff",
+  "support",
+  "security",
+  "help",
+  "docs",
+  "blog",
+  "about",
+  "status",
+  "terms",
+  "privacy",
+  "auth",
+  "oauth",
+  "static",
+  "assets",
+  "public",
+  "www",
+  "mail",
+  "null",
+  "undefined",
+  "nagar",
+  "nagarhub",
+  "nagarcode",
+  "nagardeploy",
+  "hub",
+  "code",
+  "deploy",
+]);
+
+export function isReservedNamespace(value: string): boolean {
+  return RESERVED.has(value.trim().toLowerCase());
+}

@@ -4,6 +4,8 @@ export default function HomePage() {
   return (
     <ProductShell
       product="NagarCode"
+      note="NAGAR PLATFORM · PLANNED"
+      status="In planning · not built yet"
       index="02"
       tagline={
         <>

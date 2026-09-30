@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { DiffView } from "./diff-view";
 import { HubFrame } from "./hub-frame";
+import { RepositoryNav } from "./repository-nav";
 
+type Person = { id: string; name: string; username: string | null };
 type Review = {
   id: string;
   state: "APPROVED" | "COMMENTED" | "CHANGES_REQUESTED";
   body: string;
   createdAt: string;
-  reviewer: { id: string; name: string; username: string | null };
+  reviewer: Person;
 };
+type ReviewDecision = "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED";
 type PullRequest = {
   id: string;
   number: number;
@@ -21,10 +25,32 @@ type PullRequest = {
   headBranch: string;
   mergeCommitSha: string | null;
   createdAt: string;
-  author: { id: string; name: string; username: string | null };
+  author: Person;
   reviews: Review[];
+  reviewDecision: ReviewDecision;
+  approvedBy: Person[];
+  changesRequestedBy: Person[];
 };
+type Comparison = {
+  ahead: number;
+  behind: number;
+  commits: { sha: string; shortSha: string; author: string; message: string }[];
+  commitsTruncated: boolean;
+  files: {
+    path: string;
+    status: "added" | "modified" | "deleted" | "changed";
+    additions: number;
+    deletions: number;
+    binary: boolean;
+  }[];
+  filesTruncated: boolean;
+  totals: { files: number; additions: number; deletions: number };
+  diff: string;
+  diffTruncated: boolean;
+};
+type Changes = { loading: boolean; error?: string; comparison?: Comparison | null };
 type Envelope<T> = { data?: T; error?: { message?: string } };
+
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: "include", ...init });
   const envelope = (await response.json()) as Envelope<T>;
@@ -32,12 +58,22 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return envelope.data;
 }
 
+const handle = (person: Person) => (person.username ? `@${person.username}` : person.name);
+
+const DECISION_LABEL: Record<ReviewDecision, string> = {
+  APPROVED: "Approved",
+  CHANGES_REQUESTED: "Changes requested",
+  REVIEW_REQUIRED: "Review required",
+};
+
 export function PullRequestBoard({
   username,
   repository,
+  initialHead,
 }: {
   username: string;
   repository: string;
+  initialHead?: string;
 }) {
   const base = `/api/v1/repositories/${encodeURIComponent(username)}/${encodeURIComponent(repository)}`;
   const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
@@ -49,6 +85,7 @@ export function PullRequestBoard({
   const [reviewState, setReviewState] = useState<Review["state"]>("APPROVED");
   const [reviewBody, setReviewBody] = useState("");
   const [showClosed, setShowClosed] = useState(false);
+  const [openChanges, setOpenChanges] = useState<Record<number, Changes | undefined>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -63,7 +100,11 @@ export function PullRequestBoard({
       const defaultBase = data.branches.includes("main") ? "main" : (data.branches[0] ?? "");
       setBaseBranch((current) => current || defaultBase);
       setHeadBranch(
-        (current) => current || data.branches.find((branch) => branch !== defaultBase) || "",
+        (current) =>
+          current ||
+          (initialHead && data.branches.includes(initialHead) ? initialHead : "") ||
+          data.branches.find((branch) => branch !== defaultBase) ||
+          "",
       );
       setError("");
     } catch (cause) {
@@ -71,10 +112,33 @@ export function PullRequestBoard({
     } finally {
       setLoading(false);
     }
-  }, [base]);
+  }, [base, initialHead]);
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function toggleChanges(pull: PullRequest) {
+    if (openChanges[pull.number]) {
+      setOpenChanges((current) => ({ ...current, [pull.number]: undefined }));
+      return;
+    }
+    setOpenChanges((current) => ({ ...current, [pull.number]: { loading: true } }));
+    try {
+      const data = await api<{ comparison: Comparison | null }>(`${base}/pulls/${pull.number}`);
+      setOpenChanges((current) => ({
+        ...current,
+        [pull.number]: { loading: false, comparison: data.comparison },
+      }));
+    } catch (cause) {
+      setOpenChanges((current) => ({
+        ...current,
+        [pull.number]: {
+          loading: false,
+          error: cause instanceof Error ? cause.message : "Couldn't load the changes.",
+        },
+      }));
+    }
+  }
 
   async function createPullRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -147,6 +211,12 @@ export function PullRequestBoard({
       : state === "CHANGES_REQUESTED"
         ? "Changes requested"
         : "Commented";
+  const mergeHint = (decision: ReviewDecision) =>
+    decision === "APPROVED"
+      ? "Merge this pull request"
+      : decision === "CHANGES_REQUESTED"
+        ? "A reviewer has requested changes. They must approve before this can merge."
+        : "An approval from a collaborator with write access is required.";
 
   return (
     <HubFrame>
@@ -161,26 +231,22 @@ export function PullRequestBoard({
             </p>
             <h1>Pull requests.</h1>
             <p className="muted">
-              Propose a branch merge, review it with your collaborators, then merge the approved
-              changes.
+              Propose a branch merge, review the changes with your collaborators, then merge once it
+              is approved.
             </p>
           </div>
           <div className="collab-actions">
             <button className="collab-action" onClick={() => setShowClosed(!showClosed)}>
               {showClosed ? "Show open" : "Show closed"}
             </button>
-            <Link className="button-outline" href={`/${username}/${repository}/issues`}>
-              Issues →
-            </Link>
           </div>
         </div>
-        <nav className="collab-tabs" aria-label="Repository collaboration">
-          <Link href={`/${username}/${repository}/issues`}>Issues</Link>
-          <Link className="active" href={`/${username}/${repository}/pulls`}>
-            Pull requests <span>{pullRequests.filter((item) => item.state === "OPEN").length}</span>
-          </Link>
-          <Link href={`/${username}/${repository}/settings`}>Access & webhooks</Link>
-        </nav>
+        <RepositoryNav
+          username={username}
+          repository={repository}
+          active="pulls"
+          counts={{ pulls: pullRequests.filter((item) => item.state === "OPEN").length }}
+        />
         {error && (
           <div className="error-banner" role="alert">
             {error}
@@ -208,7 +274,7 @@ export function PullRequestBoard({
               <div className="collab-list">
                 {visible.map((pull) => {
                   const latest = pull.reviews[0];
-                  const approved = latest?.state === "APPROVED";
+                  const changes = openChanges[pull.number];
                   return (
                     <article className="collab-row pull-row" key={pull.id}>
                       <div className="pull-content">
@@ -222,24 +288,124 @@ export function PullRequestBoard({
                           >
                             {pull.state}
                           </span>
+                          {pull.state === "OPEN" && (
+                            <span
+                              className={`collab-chip decision-${pull.reviewDecision.toLowerCase()}`}
+                            >
+                              {DECISION_LABEL[pull.reviewDecision]}
+                            </span>
+                          )}
                           <span>
                             <code>{pull.headBranch}</code> → <code>{pull.baseBranch}</code>
                           </span>
-                          <span>
-                            by{" "}
-                            {pull.author.username ? `@${pull.author.username}` : pull.author.name}
-                          </span>
+                          <span>by {handle(pull.author)}</span>
                           <span>
                             {pull.reviews.length} review{pull.reviews.length === 1 ? "" : "s"}
                           </span>
                         </div>
+                        {pull.state === "OPEN" &&
+                          (pull.changesRequestedBy.length > 0 || pull.approvedBy.length > 0) && (
+                            <div className="latest-review">
+                              {pull.changesRequestedBy.length > 0 && (
+                                <div>
+                                  <strong>Changes requested by</strong>{" "}
+                                  {pull.changesRequestedBy.map(handle).join(", ")}
+                                </div>
+                              )}
+                              {pull.approvedBy.length > 0 && (
+                                <div>
+                                  <strong>Approved by</strong>{" "}
+                                  {pull.approvedBy.map(handle).join(", ")}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         {latest && (
                           <div className="latest-review">
                             <strong>{labelForReview(latest.state)}</strong> by{" "}
-                            {latest.reviewer.username
-                              ? `@${latest.reviewer.username}`
-                              : latest.reviewer.name}
+                            {handle(latest.reviewer)}
                             {latest.body ? ` — ${latest.body}` : ""}
+                          </div>
+                        )}
+                        <button
+                          className="button-secondary collab-action changes-toggle"
+                          aria-expanded={Boolean(changes)}
+                          onClick={() => void toggleChanges(pull)}
+                        >
+                          {changes ? "Hide changes" : "Show changes"}
+                        </button>
+                        {changes && (
+                          <div className="changes-panel">
+                            {changes.loading ? (
+                              <p className="muted">Loading changes…</p>
+                            ) : changes.error ? (
+                              <p className="form-error" role="alert">
+                                {changes.error}
+                              </p>
+                            ) : !changes.comparison ? (
+                              <p className="muted">
+                                The branches for this pull request no longer exist, so the changes
+                                can&apos;t be shown.
+                              </p>
+                            ) : (
+                              <>
+                                <p className="changes-summary">
+                                  <strong>{changes.comparison.totals.files}</strong> file
+                                  {changes.comparison.totals.files === 1 ? "" : "s"} changed ·{" "}
+                                  <span className="stat-add">
+                                    +{changes.comparison.totals.additions}
+                                  </span>{" "}
+                                  <span className="stat-del">
+                                    −{changes.comparison.totals.deletions}
+                                  </span>{" "}
+                                  · {changes.comparison.commits.length}
+                                  {changes.comparison.commitsTruncated ? "+" : ""} commit
+                                  {changes.comparison.commits.length === 1 ? "" : "s"}
+                                  {pull.state === "OPEN" && changes.comparison.behind > 0 && (
+                                    <>
+                                      {" "}
+                                      · <em>{changes.comparison.behind} behind the base branch</em>
+                                    </>
+                                  )}
+                                </p>
+                                <ul className="changes-commits">
+                                  {changes.comparison.commits.map((commit) => (
+                                    <li key={commit.sha}>
+                                      <code>{commit.shortSha}</code> {commit.message}{" "}
+                                      <small>— {commit.author}</small>
+                                    </li>
+                                  ))}
+                                </ul>
+                                <ul className="changes-files">
+                                  {changes.comparison.files.map((file) => (
+                                    <li key={file.path}>
+                                      <span className={`file-status ${file.status}`}>
+                                        {file.status}
+                                      </span>
+                                      <code>{file.path}</code>
+                                      {file.binary ? (
+                                        <small>binary</small>
+                                      ) : (
+                                        <small>
+                                          <span className="stat-add">+{file.additions}</span>{" "}
+                                          <span className="stat-del">−{file.deletions}</span>
+                                        </small>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                                {changes.comparison.filesTruncated && (
+                                  <p className="muted">Only the first files are listed.</p>
+                                )}
+                                <DiffView diff={changes.comparison.diff} />
+                                {changes.comparison.diffTruncated && (
+                                  <p className="muted">
+                                    The diff is too large to show in full. Clone the repository to
+                                    see everything.
+                                  </p>
+                                )}
+                              </>
+                            )}
                           </div>
                         )}
                         {pull.state === "OPEN" && (
@@ -285,12 +451,8 @@ export function PullRequestBoard({
                           </button>
                           <button
                             className="collab-action merge-action"
-                            disabled={saving || !approved}
-                            title={
-                              !approved
-                                ? "An approval from another collaborator is required."
-                                : "Merge this pull request"
-                            }
+                            disabled={saving || pull.reviewDecision !== "APPROVED"}
+                            title={mergeHint(pull.reviewDecision)}
                             onClick={() => void updateState(pull, "MERGED")}
                           >
                             Merge approved PR
@@ -366,8 +528,9 @@ export function PullRequestBoard({
               </form>
             )}
             <p className="muted review-hint">
-              Merge is enabled after the latest review is an approval by someone other than the
-              author. Nagar creates a merge commit and updates the base branch.
+              A pull request can merge once someone with write access has approved it and nobody is
+              still asking for changes. Anyone with access can comment. Nagar creates a merge commit
+              and updates the base branch.
             </p>
           </aside>
         </div>

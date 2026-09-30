@@ -1,0 +1,12 @@
+# Generated, vendored, or externally owned files
+node_modules
+.pnpm-store
+.turbo
+.next
+dist
+coverage
+data
+.config
+pnpm-lock.yaml
+# Original product brief kept verbatim for reference
+uploads

@@ -14,6 +14,8 @@ const failure = (code: string, message: string): ApiFailure => ({
   error: { code, message },
 });
 type RepoParams = { username: string; repository: string };
+/** Every event fans out to every webhook, so the number per repository is bounded. */
+const MAX_WEBHOOKS = 20;
 const events = [
   "issues.opened",
   "issues.closed",
@@ -284,6 +286,15 @@ export const repositorySettingsRoutes: FastifyPluginAsync = async (app) => {
             failure(
               "INVALID_WEBHOOK",
               "Use a public HTTPS URL and choose one or more supported events.",
+            ),
+          );
+      if ((await prisma.webhook.count({ where: { repositoryId: repository.id } })) >= MAX_WEBHOOKS)
+        return reply
+          .status(409)
+          .send(
+            failure(
+              "WEBHOOK_LIMIT_REACHED",
+              `A repository can have at most ${MAX_WEBHOOKS} webhooks. Remove one first.`,
             ),
           );
       const secret = randomBytes(32).toString("base64url");

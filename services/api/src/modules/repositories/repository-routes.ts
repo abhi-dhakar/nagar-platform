@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyPluginAsync } from "fastify";
 import { currentUserId } from "../auth/current-user.js";
-import { canAccessRepository } from "./repository-access.js";
+import { canAccessRepository, effectiveRole } from "./repository-access.js";
 import { GitStore } from "../git/git-store.js";
 import {
   normalizeRepositoryPath,
@@ -128,20 +128,51 @@ export const repositoryRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/v1/repositories", async (request, reply) => {
     const userId = await currentUserId(request);
     if (!userId) return reply.status(401).send(failure("UNAUTHENTICATED", "Sign in to continue."));
+    // Everything the user can work on: their own repositories, repositories they were invited
+    // to, and repositories owned by organizations they belong to.
     const repositories = await prisma.repository.findMany({
-      where: { ownerId: userId },
+      where: {
+        OR: [
+          { ownerId: userId },
+          { members: { some: { userId } } },
+          { organization: { members: { some: { userId } } } },
+        ],
+      },
       orderBy: { updatedAt: "desc" },
-      include: { owner: { select: { username: true } } },
+      take: 200,
+      include: {
+        owner: { select: { username: true } },
+        organization: {
+          select: { slug: true, members: { where: { userId }, select: { role: true } } },
+        },
+        members: { where: { userId }, select: { role: true } },
+      },
     });
     return reply.send(
       success({
-        repositories: repositories.map(
-          ({ gitPath: _gitPath, ownerId: _ownerId, owner, ...repository }) => ({
-            ...repository,
-            owner: owner?.username ?? null,
-            cloneUrl: owner?.username ? cloneUrl(owner.username, repository.slug) : null,
-          }),
-        ),
+        repositories: repositories.map((repository) => {
+          const namespace = repository.owner?.username ?? repository.organization?.slug ?? null;
+          return {
+            id: repository.id,
+            name: repository.name,
+            slug: repository.slug,
+            description: repository.description,
+            visibility: repository.visibility,
+            createdAt: repository.createdAt,
+            updatedAt: repository.updatedAt,
+            owner: namespace,
+            namespace,
+            namespaceType: repository.organizationId
+              ? ("ORGANIZATION" as const)
+              : ("USER" as const),
+            role: effectiveRole({
+              isOwner: repository.ownerId === userId,
+              organizationRole: repository.organization?.members[0]?.role ?? null,
+              collaboratorRole: repository.members[0]?.role ?? null,
+            }),
+            cloneUrl: namespace ? cloneUrl(namespace, repository.slug) : null,
+          };
+        }),
       }),
     );
   });
@@ -296,9 +327,13 @@ export const repositoryRoutes: FastifyPluginAsync = async (app) => {
     if (!branch || !branches.includes(branch)) {
       return reply.status(404).send(failure("BRANCH_NOT_FOUND", "Branch was not found."));
     }
-    const content = await gitStore.textFile(repository.gitPath, branch, path);
-    if (content === null)
+    const blob = await gitStore.blob(repository.gitPath, branch, path);
+    if (blob.status === "not_found")
       return reply.status(404).send(failure("FILE_NOT_FOUND", "File was not found."));
-    return reply.send(success({ branch, path, content }));
+    if (blob.status === "binary")
+      return reply.send(success({ branch, path, size: blob.size, binary: true, content: null }));
+    if (blob.status === "too_large")
+      return reply.send(success({ branch, path, size: blob.size, tooLarge: true, content: null }));
+    return reply.send(success({ branch, path, size: blob.size, content: blob.content }));
   });
 };

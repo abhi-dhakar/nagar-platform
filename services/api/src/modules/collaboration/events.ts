@@ -1,6 +1,7 @@
 import { prisma } from "@nagar/database";
 import { randomUUID } from "node:crypto";
 import { request as httpsRequest } from "node:https";
+import { isIP } from "node:net";
 import { checkServerIdentity } from "node:tls";
 import { decryptWebhookSecret, lookupPublicWebhook, webhookSignature } from "./crypto.js";
 
@@ -15,6 +16,8 @@ export async function notifyRepositoryCollaborators(input: {
   title: string;
   body: string;
   url: string;
+  /** Extra people who should hear about this (for example the author of an issue). */
+  extraRecipientIds?: readonly string[];
 }) {
   const [members, organizationMembers] = await Promise.all([
     prisma.repositoryMember.findMany({
@@ -34,6 +37,7 @@ export async function notifyRepositoryCollaborators(input: {
         input.ownerId,
         ...members.map((member) => member.userId),
         ...organizationMembers.map((member) => member.userId),
+        ...(input.extraRecipientIds ?? []),
       ].filter((id): id is string => Boolean(id)),
     ),
   ].filter((userId) => userId !== input.actorId);
@@ -50,44 +54,48 @@ export async function notifyRepositoryCollaborators(input: {
   });
 }
 
-export async function deliverWebhook(webhook: {
-  id: string;
-  url: string;
-  secretCiphertext: string;
-  secretIv: string;
-  secretTag: string;
-  deliveries: { id: string; event: string; payload: string }[];
-}) {
-  const delivery = webhook.deliveries[0];
-  if (!delivery) return;
-  try {
-    const secret = decryptWebhookSecret(webhook);
-    const destination = new URL(webhook.url);
-    const resolved = await lookupPublicWebhook(destination.toString());
-    if (!resolved) throw new Error("Webhook host resolved to a non-public network address.");
-    const pinnedUrl = new URL(destination.toString());
-    pinnedUrl.hostname = resolved.address.includes(":")
-      ? `[${resolved.address}]`
-      : resolved.address;
-    const serverName = destination.hostname.replace(/^\[|\]$/g, "");
-    const signature = webhookSignature(secret, delivery.payload);
-    const statusCode = await new Promise<number>((resolve, reject) => {
+export interface WebhookRequest {
+  /** The already SSRF-checked address the connection must go to (DNS is never consulted again). */
+  address: string;
+  /** The destination the subscriber configured; its host is used for TLS and the Host header. */
+  url: URL;
+  body: string;
+  headers: Record<string, string>;
+}
+
+/** Sends one webhook request and resolves with the receiver's HTTP status code. */
+export type WebhookTransport = (request: WebhookRequest) => Promise<number>;
+
+const WEBHOOK_TIMEOUT_MS = 5_000;
+const WEBHOOK_MAX_RESPONSE_BYTES = 64 * 1024;
+
+/**
+ * The production transport: HTTPS only, connects to the pinned address, verifies the
+ * certificate against the configured hostname, never follows redirects, and bounds both the
+ * wait and the amount of response it will read.
+ */
+export function createHttpsWebhookTransport(
+  options: { ca?: string | Buffer } = {},
+): WebhookTransport {
+  return ({ address, url, body, headers }) =>
+    new Promise<number>((resolve, reject) => {
+      const pinnedUrl = new URL(url.toString());
+      pinnedUrl.hostname = address.includes(":") ? `[${address}]` : address;
+      const serverName = url.hostname.replace(/^\[|\]$/g, "");
       const request = httpsRequest(
         pinnedUrl,
         {
           method: "POST",
-          servername: serverName,
+          // SNI must be a hostname; TLS forbids sending an IP literal as the server name.
+          ...(isIP(serverName) ? {} : { servername: serverName }),
+          ...(options.ca ? { ca: options.ca } : {}),
           checkServerIdentity: (_hostname, certificate) =>
             checkServerIdentity(serverName, certificate),
-          timeout: 5_000,
+          timeout: WEBHOOK_TIMEOUT_MS,
           headers: {
-            host: destination.host,
-            "content-type": "application/json",
-            "user-agent": "Nagar-Webhooks/1.0",
-            "x-nagar-event": delivery.event,
-            "x-nagar-delivery": delivery.id,
-            "x-nagar-signature-256": signature,
-            "content-length": Buffer.byteLength(delivery.payload),
+            ...headers,
+            host: url.host,
+            "content-length": Buffer.byteLength(body),
             connection: "close",
           },
         },
@@ -95,7 +103,7 @@ export async function deliverWebhook(webhook: {
           let received = 0;
           response.on("data", (chunk: Buffer) => {
             received += chunk.length;
-            if (received > 64 * 1024)
+            if (received > WEBHOOK_MAX_RESPONSE_BYTES)
               request.destroy(new Error("Webhook response exceeded 64 KB."));
           });
           response.on("end", () => resolve(response.statusCode ?? 0));
@@ -104,7 +112,46 @@ export async function deliverWebhook(webhook: {
       );
       request.on("timeout", () => request.destroy(new Error("Webhook request timed out.")));
       request.on("error", reject);
-      request.end(delivery.payload);
+      request.end(body);
+    });
+}
+
+let activeTransport: WebhookTransport = createHttpsWebhookTransport();
+
+/** Test hook: swap the network transport (pass `null` to restore the real one). */
+export function setWebhookTransport(transport: WebhookTransport | null): void {
+  activeTransport = transport ?? createHttpsWebhookTransport();
+}
+
+export async function deliverWebhook(
+  webhook: {
+    id: string;
+    url: string;
+    secretCiphertext: string;
+    secretIv: string;
+    secretTag: string;
+    deliveries: { id: string; event: string; payload: string }[];
+  },
+  transport: WebhookTransport = activeTransport,
+) {
+  const delivery = webhook.deliveries[0];
+  if (!delivery) return;
+  try {
+    const secret = decryptWebhookSecret(webhook);
+    const destination = new URL(webhook.url);
+    const resolved = await lookupPublicWebhook(destination.toString());
+    if (!resolved) throw new Error("Webhook host resolved to a non-public network address.");
+    const statusCode = await transport({
+      address: resolved.address,
+      url: destination,
+      body: delivery.payload,
+      headers: {
+        "content-type": "application/json",
+        "user-agent": "Nagar-Webhooks/1.0",
+        "x-nagar-event": delivery.event,
+        "x-nagar-delivery": delivery.id,
+        "x-nagar-signature-256": webhookSignature(secret, delivery.payload),
+      },
     });
     const ok = statusCode >= 200 && statusCode < 300;
     await prisma.webhookDelivery.update({

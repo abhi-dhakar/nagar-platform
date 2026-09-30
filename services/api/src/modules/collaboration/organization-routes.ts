@@ -2,6 +2,7 @@ import { prisma } from "@nagar/database";
 import type { ApiFailure, ApiSuccess } from "@nagar/types";
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
+import { isReservedNamespace } from "../../lib/reserved-names.js";
 import { currentUserId } from "../auth/current-user.js";
 import { gitStore } from "../repositories/repository-routes.js";
 
@@ -67,6 +68,15 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
           failure(
             "INVALID_ORGANIZATION",
             "Organization name must be 2–80 characters; slug 2–39; description up to 280.",
+          ),
+        );
+    if (isReservedNamespace(slug))
+      return reply
+        .status(409)
+        .send(
+          failure(
+            "NAMESPACE_RESERVED",
+            "That name is reserved by NagarHub. Please choose another slug.",
           ),
         );
     if (await prisma.user.findUnique({ where: { username: slug }, select: { id: true } }))
@@ -202,18 +212,16 @@ export const organizationRoutes: FastifyPluginAsync = async (app) => {
           organizationId: _organizationId,
           ...safeRepository
         } = repository;
-        return reply
-          .status(201)
-          .send(
-            success({
-              repository: {
-                ...safeRepository,
-                namespace: organization.slug,
-                namespaceType: "ORGANIZATION",
-                cloneUrl: `${(process.env.NAGAR_GIT_BASE_URL ?? "http://localhost:4000/git").replace(/\/+$/, "")}/${encodeURIComponent(organization.slug)}/${encodeURIComponent(repository.slug)}.git`,
-              },
-            }),
-          );
+        return reply.status(201).send(
+          success({
+            repository: {
+              ...safeRepository,
+              namespace: organization.slug,
+              namespaceType: "ORGANIZATION",
+              cloneUrl: `${(process.env.NAGAR_GIT_BASE_URL ?? "http://localhost:4000/git").replace(/\/+$/, "")}/${encodeURIComponent(organization.slug)}/${encodeURIComponent(repository.slug)}.git`,
+            },
+          }),
+        );
       } catch (error) {
         if (metadataCreated)
           await prisma.repository.delete({ where: { id } }).catch(() => undefined);

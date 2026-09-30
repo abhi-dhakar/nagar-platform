@@ -3,7 +3,7 @@
 > **Purpose:** This document is the single source of truth for the Nagar developer-platform ecosystem.
 > It is intentionally written so that a human developer, coding agent, or another AI assistant can understand the project without needing the original conversation.
 >
-> **Status:** Phase 0 foundation and Phase 1 NagarHub core complete; Phase 2 collaboration implemented. Database-backed verification still requires local PostgreSQL and Redis.
+> **Status:** Phases 0 (foundation), 1 (NagarHub core), and 2 (NagarHub collaboration) are implemented and were audited by running them against real PostgreSQL, Redis, and Git on 2026-09-30 (see §33). NagarCode and NagarDeploy are product shells.
 > **Owner:** Abhishek Nagar
 > **Primary goal:** Build a connected developer platform consisting of NagarHub, NagarCode, and NagarDeploy.
 
@@ -1200,45 +1200,55 @@ The agent should NOT blindly recreate files that already exist.
 ## Phase 0 — Foundation
 
 - [x] Create monorepo
-- [x] Configure pnpm
-- [x] Configure Turborepo
+- [x] Configure pnpm (pnpm 10; dependency build scripts allow-listed in `package.json`)
+- [x] Configure Turborepo (strict environment mode with declared variables)
 - [x] Configure TypeScript
-- [x] Configure ESLint
+- [x] Configure ESLint (plus Prettier, enforced by `pnpm format:check`)
 - [x] Create shared UI package
-- [x] Setup PostgreSQL
-- [x] Setup Redis
-- [x] Setup shared authentication (Better Auth; email/password foundation)
-- [x] Create API service (Fastify health/readiness/session endpoints)
+- [x] Setup PostgreSQL (Prisma schema + 3 migrations, applied and diffed on PostgreSQL 17)
+- [x] Setup Redis (compose service; used by the API readiness check)
+- [x] Setup shared authentication (Better Auth; email/password, cookie sessions, CSRF origin checks)
+- [x] Create API service (Fastify: health/readiness/session endpoints, one error envelope)
+- [x] Continuous integration (GitHub Actions: format, lint, migrate, typecheck, test, build)
 
-**Phase 0 implementation note (2026-09-30):** The monorepo, shared packages, API, auth foundation, PostgreSQL schema, and Redis compose service were established. At that point the three apps were shells. Phase 1 now implements NagarHub core; NagarCode and NagarDeploy remain shells. See `README.md`, `docs/architecture/overview.md`, and `docs/decisions/` for the current implementation.
+**Phase 0 implementation note (2026-09-30):** The monorepo, shared packages, API, auth, PostgreSQL schema, and Redis compose service were established. The audit ran the root scripts in Turborepo's strict env mode and fixed: (1) `dotenv -e .env -- turbo …` passed _nothing_ to tasks, so the Hub built its `/api` and `/git` rewrites for `localhost:4000` whatever `NAGAR_API_INTERNAL` said — `turbo.json` now declares the runtime variables (and `NODE_ENV` is deliberately not passed, since `development` breaks `next build`); (2) pnpm 10 silently skipped the Prisma and esbuild install scripts — now allow-listed; (3) `pnpm db:migrate` hard-coded `--name init` and there was no root `db:deploy` — fixed; (4) the long placeholder `BETTER_AUTH_SECRET` from `.env.example` passed the length check and could have signed production sessions — now rejected in production; (5) every API error was labelled `INTERNAL_ERROR` and `trustProxy` was hard-coded off — errors now have specific codes and `TRUST_PROXY` is configurable; (6) there was no CI and `format:check` failed — both fixed. Redis is provisioned and checked by readiness; nothing else uses it yet. See `docs/decisions/ADR-007-verification-and-tooling.md`.
 
 ## Phase 1 — NagarHub Core
 
 - [x] User registration/login (Better Auth email/password UI and shared API sessions)
 - [x] User profile (unique username, display name, bio, public profile)
 - [x] Create repository (private/public, optional starter README)
-- [x] Repository page and file browser
-- [x] Git repository storage (opaque UUID-keyed bare repositories)
+- [x] Repository page and file browser (binary and oversized files are reported, not shown as garbage)
+- [x] Git repository storage (opaque UUID-keyed bare repositories; `fsck` on receive)
 - [x] Git clone (Git smart HTTP)
 - [x] Git push (owner session or Nagar email/password; TLS required outside local dev)
-- [x] Commit history
-- [x] Branch listing and selection
-- [x] Safe README Markdown rendering
+- [x] Commit history (paginated per branch, with totals)
+- [x] Branch listing and selection (branches page with each tip commit; branch picker)
+- [x] Safe README Markdown rendering (raw HTML shown as text, unsafe URLs dropped)
 
-**Phase 1 implementation note (2026-09-30):** The flow is implemented across the Hub, API, PostgreSQL/Prisma, and the Git CLI backend. The Git HTTP transport is integration-tested by cloning, committing, and pushing against a temporary bare repo. Prisma schema validation, lint, typecheck, tests, and production builds pass. Docker is unavailable in the coding environment, so a live PostgreSQL migration/signup/repository API run could not be performed here. OAuth, email verification, and shared persistent abuse controls remain future hardening; repository membership and permissions are implemented in Phase 2.
+**Phase 1 implementation note (2026-09-30):** Registration, sessions, profiles, repositories, Git clone/push (including Basic auth and private-repository enforcement), empty-repository first push, browsing, and README rendering were run live and work. The audit found and fixed: usernames such as `api`, `git`, or `login` could be claimed, shadowing Hub routes and the `/git` and `/api` proxies (now reserved); "commit history" was only the latest 20 commits inside the repository summary (the Hub showed 8) and "branches" was a bare name list — there are now `GET …/commits` (paginated) and `GET …/branches` endpoints and Hub pages; large or binary files produced a misleading "not found"; all Git processes now ignore the host's personal Git configuration. OAuth, email verification, and shared persistent abuse controls remain future hardening.
 
 ## Phase 2 — NagarHub Collaboration
 
 - [x] Issues (create, list, edit, close/reopen)
 - [x] Labels (repository-scoped, create and apply)
-- [x] Pull requests (branch-based create/list/close/merge)
-- [x] Reviews (approve/comment/request changes; approval-gated merge)
+- [x] Pull requests (branch-based create/list/close/merge, with a commits/files/diff review view)
+- [x] Reviews (approve/comment/request changes; merge gated on the combined decision)
 - [x] Permissions (READ/WRITE/ADMIN, including Git protocol enforcement)
 - [x] Organizations (members/roles and organization-owned repositories)
 - [x] Notifications (inbox, per-item and mark-all read)
 - [x] Webhooks (signed HTTPS events, encrypted secrets, delivery history/manual retry)
 
-**Phase 2 implementation note (2026-09-30):** Core routes and Hub screens are implemented, with a PostgreSQL migration, unit/integration tests, and a shared Neo-brutalist stylesheet imported by Hub, Code, and Deploy. The migration and database-backed flows have not been applied/exercised in this environment because PostgreSQL/Redis services are unavailable. Webhook dispatch currently runs asynchronously in the API process, so delivery attempts are not durable across a process crash; a persistent worker/outbox remains a reliability follow-up.
+**Phase 2 implementation note (2026-09-30):** Issues, labels, pull requests, reviews, collaborators, organizations, notifications, and webhooks were run live and work. The audit found and fixed real defects: one reviewer's approval hid another reviewer's outstanding change request (a blocked pull request merged) — reviews now collapse into a per-reviewer decision and only reviewers with write access count; reviewers had no way to see the change — pull requests now show commits, per-file stats, and a diff; a single `git push` fired the `push` webhook twice (advertisement and pack) even for no-op pushes, and its payload had no ref or commits — one event per changed ref now carries them; merges were not serialized and every failure was reported as `MERGE_CONFLICT`; labels accepted case-insensitive duplicates and silently replaced invalid colors; the dashboard hid repositories shared with you or owned by your organizations; issue authors with read access could not close their own issues; organization slugs could shadow app routes; notifications missed an issue's author and notified people about their own actions. Webhook dispatch still runs in the API process, so delivery attempts are not durable across a crash and there is no automatic retry — a worker/outbox remains the reliability follow-up. See `docs/decisions/ADR-006-hub-collaboration.md` (amendments).
+
+### Verification record (2026-09-30)
+
+Run against PostgreSQL 17.10 (native binaries) and Redis 7.2.5 (built from source), Node 22, pnpm 10.15, Git 2.39, in a workspace without Docker:
+
+- `prisma migrate deploy` applied all migrations; migrated schema vs `schema.prisma` differs only by the hand-written one-namespace `CHECK` constraint.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` (API unit + integration, Hub component tests) and `pnpm build` pass in strict env mode.
+- Flows driven live with the real `git` CLI, directly and through the Hub's proxy; every Hub route rendered under `next dev`.
+- **Not covered here:** Prisma's native query engine (the sandbox could not download it, so a Rust-free client engine with the `pg` adapter ran the same code), the GitHub Actions workflow, a real browser session, and delivery to an external HTTPS receiver.
 
 ## Phase 3 — NagarDeploy
 
@@ -1494,16 +1504,17 @@ NagarDeploy    [~] App shell only; deployment workflow not started
 
 Monorepo       [x] Foundation complete
 Auth           [x] Shared email/password; further production hardening remains
-PostgreSQL     [x] Auth + profile + repository schema and migrations
-Redis          [x] Compose service and API readiness integration
+PostgreSQL     [x] Auth + profile + repository + collaboration schema; migrations applied and diffed
+Redis          [x] Compose service and API readiness integration (nothing else uses it yet)
 Git storage    [x] Local bare repositories + smart HTTP clone/push
 Docker         [~] Local infrastructure compose only; isolated builds not started
-CI/CD          [ ] Not started
+CI             [x] GitHub Actions: format, lint, migrate, typecheck, test, build
+Deploy/CD      [ ] Not started
 ```
 
 The next implementation target is:
 
-> **Phase 3 — NagarDeploy**, after the Phase 2 migration and database-backed workflow are validated in a configured environment.
+> **Phase 3 — NagarDeploy.** Phases 0–2 have been run end to end against PostgreSQL, Redis, and Git; confirm the CI workflow is green on GitHub first.
 
 NagarCode and NagarDeploy currently have Neo-brutalist product shells, not their full product workflows.
 
@@ -1513,14 +1524,14 @@ NagarCode and NagarDeploy currently have Neo-brutalist product shells, not their
 
 ## Immediate next steps
 
-Phase 0, Phase 1, and the Phase 2 implementation are complete. Before production/Phase 3 work:
+Phases 0–2 are implemented and verified. Before production or Phase 3 work:
 
 ```text
-1. Start PostgreSQL/Redis and apply the Phase 0/1/2 migrations.
-2. Smoke-test signup, organization/repository creation, collaborator Git clone/push, issue/label flows, reviewed pull-request merge, notifications, and webhook delivery.
-3. Add database-backed integration tests in CI.
-4. Move webhook delivery into a durable outbox/worker with bounded backoff and idempotency.
-5. Replace in-process Git credential throttling with shared rate limiting before scaling out.
+1. Push the branch and confirm the GitHub Actions workflow is green (it was written but not run in the audit environment).
+2. Run the suite once with Prisma's native engine, which the audit sandbox could not download.
+3. Move webhook delivery into a durable outbox/worker with bounded backoff and idempotency.
+4. Replace in-process Git credential throttling with shared rate limiting (Redis) before scaling out.
+5. Add browser end-to-end tests (Playwright) on top of the API integration and jsdom component tests.
 6. Begin Phase 3 NagarDeploy (repository connection, deployment queue, isolated Docker builds, logs/status).
 ```
 

@@ -7,6 +7,14 @@
     "node": ">=20.9",
     "pnpm": ">=10"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
+    ]
+  },
   "scripts": {
     "dev": "dotenv -e .env -- turbo dev",
     "build": "dotenv -e .env -- turbo build",
@@ -17,6 +25,7 @@
     "format:check": "prettier --check .",
     "db:generate": "dotenv -e .env -- pnpm --filter @nagar/database run db:generate",
     "db:migrate": "dotenv -e .env -- pnpm --filter @nagar/database run db:migrate",
+    "db:deploy": "dotenv -e .env -- pnpm --filter @nagar/database run db:deploy",
     "db:studio": "dotenv -e .env -- pnpm --filter @nagar/database run db:studio",
     "infra:up": "docker compose up -d postgres redis",
     "infra:down": "docker compose down"

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { HubFrame } from "./hub-frame";
+import { RepositoryNav } from "./repository-nav";
 
 type Collaborator = {
   id: string;
@@ -219,13 +220,7 @@ export function RepositorySettings({
             <p className="muted">Manage repository roles and signed webhook deliveries.</p>
           </div>
         </div>
-        <nav className="collab-tabs" aria-label="Repository collaboration">
-          <Link href={`/${username}/${repository}/issues`}>Issues</Link>
-          <Link href={`/${username}/${repository}/pulls`}>Pull requests</Link>
-          <Link className="active" href={`/${username}/${repository}/settings`}>
-            Access & webhooks
-          </Link>
-        </nav>
+        <RepositoryNav username={username} repository={repository} active="settings" />
         {error && (
           <div className="error-banner" role="alert">
             {error}

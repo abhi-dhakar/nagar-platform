@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { devNull } from "node:os";
 
 const MAX_GIT_RESPONSE_BYTES = 128 * 1024 * 1024;
 const GIT_TIMEOUT_MS = 120_000;
@@ -28,6 +29,7 @@ export async function runGitHttpBackend(request: GitBackendRequest): Promise<Git
     GIT_HTTP_EXPORT_ALL: "1",
     GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: devNull,
     PATH_INFO: request.pathInfo,
     REQUEST_METHOD: request.method,
     QUERY_STRING: parsedUrl.search.slice(1),

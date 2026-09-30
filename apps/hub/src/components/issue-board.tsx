@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { HubFrame } from "./hub-frame";
+import { RepositoryNav } from "./repository-nav";
 
 type Label = { id: string; name: string; color: string; description: string | null };
 type Issue = {
@@ -35,6 +36,10 @@ export function IssueBoard({ username, repository }: { username: string; reposit
   const [labelName, setLabelName] = useState("");
   const [labelColor, setLabelColor] = useState("EDFF00");
   const [showClosed, setShowClosed] = useState(false);
+  const [editing, setEditing] = useState<Issue | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftBody, setDraftBody] = useState("");
+  const [draftLabels, setDraftLabels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -103,6 +108,43 @@ export function IssueBoard({ username, repository }: { username: string; reposit
     }
   }
 
+  function startEditing(issue: Issue) {
+    setEditing(issue);
+    setDraftTitle(issue.title);
+    setDraftBody(issue.body);
+    setDraftLabels(issue.labels.map(({ label }) => label.id));
+    setNotice("");
+  }
+
+  async function saveEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    setError("");
+    try {
+      const before = editing.labels.map(({ label }) => label.id).sort();
+      const after = [...draftLabels].sort();
+      const labelsChanged = before.join() !== after.join();
+      await api(`${base}/issues/${editing.number}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        // Labels are a maintainer action, so only send them when they actually changed.
+        body: JSON.stringify({
+          title: draftTitle,
+          body: draftBody,
+          ...(labelsChanged ? { labelIds: draftLabels } : {}),
+        }),
+      });
+      setEditing(null);
+      setNotice(`Issue #${editing.number} updated.`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't update the issue.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function toggleIssue(issue: Issue) {
     setError("");
     try {
@@ -141,18 +183,14 @@ export function IssueBoard({ username, repository }: { username: string; reposit
             >
               {showClosed ? "Show open" : "Show closed"}
             </button>
-            <Link className="button-outline" href={`/${username}/${repository}/pulls`}>
-              Pull requests →
-            </Link>
           </div>
         </div>
-        <nav className="collab-tabs" aria-label="Repository collaboration">
-          <Link className="active" href={`/${username}/${repository}/issues`}>
-            Issues <span>{issues.length}</span>
-          </Link>
-          <Link href={`/${username}/${repository}/pulls`}>Pull requests</Link>
-          <Link href={`/${username}/${repository}/settings`}>Access & webhooks</Link>
-        </nav>
+        <RepositoryNav
+          username={username}
+          repository={repository}
+          active="issues"
+          counts={{ issues: issues.length }}
+        />
         {error && (
           <div className="error-banner" role="alert">
             {error}
@@ -179,33 +217,108 @@ export function IssueBoard({ username, repository }: { username: string; reposit
               <div className="collab-list">
                 {issues.map((issue) => (
                   <article className="collab-row" key={issue.id}>
-                    <div>
-                      <h3>
-                        #{issue.number} · {issue.title}
-                      </h3>
-                      {issue.body && <p>{issue.body}</p>}
-                      <div className="collab-row-meta">
-                        <span>
-                          {issue.author.username ? `@${issue.author.username}` : issue.author.name}
-                        </span>
-                        <span>opened {new Date(issue.createdAt).toLocaleDateString()}</span>
-                        {issue.labels.map(({ label }) => (
-                          <span
-                            key={label.id}
-                            className="collab-chip"
-                            style={{ backgroundColor: `#${label.color}` }}
+                    {editing?.id === issue.id ? (
+                      <form
+                        className="collab-form issue-edit-form"
+                        onSubmit={(e) => void saveEdit(e)}
+                      >
+                        <label>
+                          Title
+                          <input
+                            value={draftTitle}
+                            onChange={(event) => setDraftTitle(event.target.value)}
+                            maxLength={180}
+                            required
+                          />
+                        </label>
+                        <label>
+                          Description
+                          <textarea
+                            value={draftBody}
+                            onChange={(event) => setDraftBody(event.target.value)}
+                            maxLength={20_000}
+                          />
+                        </label>
+                        {labels.length > 0 && (
+                          <fieldset className="label-choice-list">
+                            <legend>Labels</legend>
+                            {labels.map((label) => (
+                              <label key={label.id}>
+                                <input
+                                  type="checkbox"
+                                  checked={draftLabels.includes(label.id)}
+                                  onChange={() =>
+                                    setDraftLabels((current) =>
+                                      current.includes(label.id)
+                                        ? current.filter((id) => id !== label.id)
+                                        : [...current, label.id],
+                                    )
+                                  }
+                                />
+                                <span
+                                  className="collab-chip"
+                                  style={{ backgroundColor: `#${label.color}` }}
+                                >
+                                  {label.name}
+                                </span>
+                              </label>
+                            ))}
+                          </fieldset>
+                        )}
+                        <div className="collab-actions">
+                          <button className="collab-action" disabled={saving}>
+                            {saving ? "Saving…" : "Save changes"}
+                          </button>
+                          <button
+                            type="button"
+                            className="button-secondary collab-action"
+                            onClick={() => setEditing(null)}
                           >
-                            {label.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <button
-                      className="button-secondary collab-action"
-                      onClick={() => void toggleIssue(issue)}
-                    >
-                      {issue.state === "OPEN" ? "Close" : "Reopen"}
-                    </button>
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <div>
+                          <h3>
+                            #{issue.number} · {issue.title}
+                          </h3>
+                          {issue.body && <p>{issue.body}</p>}
+                          <div className="collab-row-meta">
+                            <span>
+                              {issue.author.username
+                                ? `@${issue.author.username}`
+                                : issue.author.name}
+                            </span>
+                            <span>opened {new Date(issue.createdAt).toLocaleDateString()}</span>
+                            {issue.labels.map(({ label }) => (
+                              <span
+                                key={label.id}
+                                className="collab-chip"
+                                style={{ backgroundColor: `#${label.color}` }}
+                              >
+                                {label.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="collab-actions">
+                          <button
+                            className="button-secondary collab-action"
+                            onClick={() => startEditing(issue)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="button-secondary collab-action"
+                            onClick={() => void toggleIssue(issue)}
+                          >
+                            {issue.state === "OPEN" ? "Close" : "Reopen"}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </article>
                 ))}
               </div>

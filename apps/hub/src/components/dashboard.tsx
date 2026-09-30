@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { partitionRepositories } from "../lib/repositories";
 import { HubFrame } from "./hub-frame";
 
 type User = {
@@ -21,6 +22,8 @@ type Repository = {
   updatedAt: string;
   owner: string | null;
   cloneUrl: string | null;
+  namespaceType: "USER" | "ORGANIZATION";
+  role: "READ" | "WRITE" | "ADMIN" | null;
 };
 
 export function Dashboard() {
@@ -60,6 +63,36 @@ export function Dashboard() {
     };
   }, [router]);
 
+  const { mine, shared } = partitionRepositories(repositories, user?.username);
+
+  function renderRepositories(items: Repository[]) {
+    return (
+      <div className="repo-list">
+        {items.map((repo) => (
+          <article key={repo.id} className="repo-row">
+            <div className="repo-avatar">{repo.name.slice(0, 1).toUpperCase()}</div>
+            <div className="repo-row-main">
+              <Link href={`/${repo.owner}/${repo.slug}`} className="repo-title">
+                {repo.owner}/{repo.slug}
+              </Link>
+              <p>{repo.description || "No description yet."}</p>
+              <span>Updated {new Date(repo.updatedAt).toLocaleDateString()}</span>
+            </div>
+            {repo.namespaceType === "ORGANIZATION" && <span className="access-badge">ORG</span>}
+            {repo.role && repo.role !== "ADMIN" && (
+              <span className="access-badge" title="Your access to this repository">
+                {repo.role}
+              </span>
+            )}
+            <span className={`visibility ${repo.visibility.toLowerCase()}`}>
+              {repo.visibility === "PRIVATE" ? "◉ Private" : "◎ Public"}
+            </span>
+          </article>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <HubFrame>
       <section className="dashboard-main">
@@ -71,7 +104,10 @@ export function Dashboard() {
             <h1>
               {user ? `Good to see you, ${user.name.split(" ")[0]}.` : "Your work, at a glance."}
             </h1>
-            <p className="muted">Repositories you own and the latest activity across NagarHub.</p>
+            <p className="muted">
+              Repositories you own, and the ones you collaborate on through teammates or
+              organizations.
+            </p>
           </div>
           <div className="dashboard-actions">
             <Link href="/settings/profile" className="button-outline">
@@ -112,7 +148,7 @@ export function Dashboard() {
           <div>
             <p className="eyebrow">YOUR REPOSITORIES</p>
             <h2>
-              Projects <span>{repositories.length}</span>
+              Projects <span>{mine.length}</span>
             </h2>
           </div>
           <Link href={user?.username ? `/${user.username}` : "/settings/profile"}>
@@ -134,23 +170,30 @@ export function Dashboard() {
             </Link>
           </div>
         ) : (
-          <div className="repo-list">
-            {repositories.map((repo) => (
-              <article key={repo.id} className="repo-row">
-                <div className="repo-avatar">{repo.name.slice(0, 1).toUpperCase()}</div>
-                <div className="repo-row-main">
-                  <Link href={`/${repo.owner}/${repo.slug}`} className="repo-title">
-                    {repo.owner}/{repo.slug}
-                  </Link>
-                  <p>{repo.description || "No description yet."}</p>
-                  <span>Updated {new Date(repo.updatedAt).toLocaleDateString()}</span>
+          <>
+            {mine.length > 0 ? (
+              renderRepositories(mine)
+            ) : (
+              <div className="empty-state compact-empty">
+                You don&apos;t own a repository yet.{" "}
+                <Link href="/new">Create your first one →</Link>
+              </div>
+            )}
+            {shared.length > 0 && (
+              <>
+                <div className="section-heading shared-heading">
+                  <div>
+                    <p className="eyebrow">SHARED WITH YOU</p>
+                    <h2>
+                      Collaborations <span>{shared.length}</span>
+                    </h2>
+                  </div>
+                  <Link href="/organizations">Organizations ↗</Link>
                 </div>
-                <span className={`visibility ${repo.visibility.toLowerCase()}`}>
-                  {repo.visibility === "PRIVATE" ? "◉ Private" : "◎ Public"}
-                </span>
-              </article>
-            ))}
-          </div>
+                {renderRepositories(shared)}
+              </>
+            )}
+          </>
         )}
         <div className="dashboard-footnote">
           <span>ONE IDENTITY</span>
