@@ -1,0 +1,826 @@
+/* Nagar's shared Neo-brutalist system: loud ink, warm paper, electric blocks, zero softness. */
+:root {
+  --neo-ink: #111111;
+  --neo-paper: #fffdf4;
+  --neo-white: #ffffff;
+  --neo-yellow: #edff00;
+  --neo-blue: #3657ff;
+  --neo-coral: #ff644e;
+  --neo-lime: #baff69;
+  --neo-violet: #c9a7ff;
+  --neo-shadow: 6px 6px 0 var(--neo-ink);
+  --ink: var(--neo-ink) !important;
+  --muted: #424242 !important;
+  --paper: var(--neo-paper) !important;
+  --line: var(--neo-ink) !important;
+  --green: var(--neo-yellow) !important;
+  --dark: var(--neo-ink) !important;
+  --white: var(--neo-white) !important;
+}
+
+html,
+body {
+  min-height: 100%;
+  background-color: var(--neo-paper) !important;
+  color: var(--neo-ink) !important;
+}
+body {
+  position: relative;
+  isolation: isolate;
+  font-family: Arial, Helvetica, sans-serif;
+}
+body::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(#111 0.7px, transparent 0.7px);
+  background-size: 14px 14px;
+  content: "";
+  opacity: 0.075;
+  pointer-events: none;
+}
+::selection {
+  background: var(--neo-yellow);
+  color: var(--neo-ink);
+}
+:focus-visible {
+  outline: 3px solid var(--neo-blue) !important;
+  outline-offset: 3px;
+}
+a {
+  color: inherit;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button,
+a,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.55;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Shared brand language */
+html body .brand-lockup {
+  gap: 10px;
+  color: var(--neo-ink);
+  font-weight: 900;
+}
+html body .brand-mark {
+  display: inline-grid;
+  place-items: center;
+  border: 3px solid var(--neo-ink);
+  border-radius: 0 !important;
+  background: var(--neo-yellow);
+  box-shadow: 3px 3px 0 var(--neo-ink);
+  color: var(--neo-ink);
+  font-weight: 900;
+}
+html body .brand-name {
+  font-weight: 900;
+}
+html body .brand-product {
+  padding: 3px 6px;
+  border: 2px solid var(--neo-ink);
+  background: var(--neo-blue);
+  color: #fff;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+html body .eyebrow {
+  color: #333;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+html body .eyebrow span {
+  border: 2px solid var(--neo-ink);
+  border-radius: 0 !important;
+  background: var(--neo-yellow);
+  color: var(--neo-ink);
+  font-weight: 900;
+}
+
+/* The same hard-edge treatment across Hub, Code, Deploy, and shared surfaces. */
+html body .topbar,
+html body .hub-nav,
+html body .footer,
+html body .hub-footer {
+  border-color: var(--neo-ink);
+  border-bottom-width: 3px;
+}
+html body .footer,
+html body .hub-footer {
+  border-top-width: 3px;
+  border-bottom: 0;
+}
+html body .foundation-card,
+html body .form-card,
+html body .file-browser,
+html body .readme-card,
+html body .side-card,
+html body .repo-row,
+html body .empty-state,
+html body .notice,
+html body .error-banner,
+html body .profile-page,
+html body .collab-card,
+html body .org-card,
+html body .notification-row,
+html body .settings-card,
+html body .repo-heading,
+html body .repo-toolbar {
+  border: 3px solid var(--neo-ink) !important;
+  border-radius: 0 !important;
+  background-color: var(--neo-white) !important;
+  box-shadow: var(--neo-shadow) !important;
+}
+html body .foundation-card {
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+html body .foundation-card:hover {
+  border-color: var(--neo-ink);
+  box-shadow: 9px 9px 0 var(--neo-ink) !important;
+  transform: translate(-2px, -2px);
+}
+html body .card-number,
+html body .file-count,
+html body .file-path,
+html body .profile-username,
+html body .notification-meta {
+  font-weight: 900;
+}
+html body .primary-link,
+html body .button-primary,
+html body .button-outline,
+html body .signout-button,
+html body .button-secondary,
+html body .collab-action {
+  min-height: 42px;
+  border: 3px solid var(--neo-ink) !important;
+  border-radius: 0 !important;
+  background: var(--neo-yellow) !important;
+  box-shadow: 4px 4px 0 var(--neo-ink) !important;
+  color: var(--neo-ink) !important;
+  font-weight: 900 !important;
+  text-decoration: none;
+  transition:
+    transform 100ms ease,
+    box-shadow 100ms ease;
+  cursor: pointer;
+}
+html body .primary-link:hover,
+html body .button-primary:hover,
+html body .button-outline:hover,
+html body .signout-button:hover,
+html body .button-secondary:hover,
+html body .collab-action:hover {
+  box-shadow: 1px 1px 0 var(--neo-ink) !important;
+  transform: translate(3px, 3px);
+}
+html body .primary-link span,
+html body .button-primary span {
+  color: var(--neo-ink);
+}
+html body .button-outline,
+html body .button-secondary {
+  background: var(--neo-white) !important;
+}
+html body .signout-button {
+  background: var(--neo-coral) !important;
+}
+html body .home-signin,
+html body .nav-links a,
+html body .section-heading > a {
+  color: var(--neo-ink);
+  font-weight: 900;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+html body .nav-links a:hover,
+html body .home-signin:hover,
+html body .section-heading > a:hover {
+  text-decoration: underline;
+}
+html body .form-card input:not([type="checkbox"]):not([type="radio"]),
+html body .form-card textarea,
+html body .form-card select,
+html body .collab-card input,
+html body .collab-card textarea,
+html body .collab-card select,
+html body .settings-card input,
+html body .settings-card select {
+  border: 2px solid var(--neo-ink) !important;
+  border-radius: 0 !important;
+  background: var(--neo-paper) !important;
+  color: var(--neo-ink) !important;
+  box-shadow: 3px 3px 0 #111 !important;
+}
+html body .form-card input:focus,
+html body .form-card textarea:focus,
+html body .collab-card input:focus,
+html body .collab-card textarea:focus,
+html body .settings-card input:focus {
+  border-color: var(--neo-blue) !important;
+  box-shadow: 4px 4px 0 var(--neo-blue) !important;
+}
+html body .status-pill {
+  border: 2px solid var(--neo-ink);
+  border-radius: 0 !important;
+  background: var(--neo-lime);
+  color: var(--neo-ink);
+  font-weight: 900;
+}
+html body .status-dot {
+  border: 1px solid var(--neo-ink);
+  border-radius: 0;
+  background: var(--neo-blue);
+  box-shadow: none;
+}
+html body .form-error,
+html body .error-banner {
+  border: 3px solid var(--neo-ink);
+  border-radius: 0 !important;
+  background: var(--neo-coral) !important;
+  box-shadow: 4px 4px 0 var(--neo-ink);
+  color: var(--neo-ink);
+  font-weight: 800;
+}
+html body .form-success,
+html body .notice {
+  border: 3px solid var(--neo-ink);
+  border-radius: 0 !important;
+  background: var(--neo-lime) !important;
+  box-shadow: 4px 4px 0 var(--neo-ink);
+  color: var(--neo-ink);
+  font-weight: 800;
+}
+html body .repo-avatar,
+html body .large-avatar,
+html body .owner-chip > span,
+html body .empty-icon,
+html body .auth-proof > span {
+  border: 3px solid var(--neo-ink);
+  border-radius: 0 !important;
+  background: var(--neo-blue);
+  box-shadow: 3px 3px 0 var(--neo-ink);
+  color: #fff;
+  font-weight: 900;
+}
+html body .visibility {
+  border: 2px solid var(--neo-ink);
+  border-radius: 0 !important;
+  background: var(--neo-lime);
+  color: var(--neo-ink);
+  font-weight: 900;
+}
+html body .visibility.private {
+  background: var(--neo-violet);
+}
+html body .file-row,
+html body .repo-tabs span,
+html body .breadcrumbs button,
+html body .active-tab {
+  border-radius: 0 !important;
+  color: var(--neo-ink);
+  font-weight: 800;
+}
+html body .file-row:hover,
+html body .breadcrumbs button:hover {
+  background: var(--neo-yellow);
+}
+html body .active-tab {
+  border-bottom: 3px solid var(--neo-ink);
+}
+html body .repo-heading h1,
+html body .auth-intro h1,
+html body .form-page h1,
+html body .dashboard-heading h1,
+html body .profile-page h1,
+html body .hero h1 {
+  color: var(--neo-ink);
+  font-weight: 900;
+}
+html body .repo-heading h1::selection,
+html body h1::selection {
+  background: var(--neo-blue);
+  color: #fff;
+}
+html body .orbit-core {
+  border: 4px solid var(--neo-ink);
+  border-radius: 0 !important;
+  background: var(--neo-yellow);
+  box-shadow: 7px 7px 0 var(--neo-ink);
+  color: var(--neo-ink);
+}
+html body .orbit {
+  border: 2px dashed var(--neo-ink);
+  border-radius: 50%;
+}
+html body .foundation-card:nth-child(2n) {
+  background-color: var(--neo-lime) !important;
+}
+html body .foundation-card:nth-child(3n) {
+  background-color: var(--neo-violet) !important;
+}
+html body .foundation-card:nth-child(2n) .card-number,
+html body .foundation-card:nth-child(3n) .card-number {
+  color: var(--neo-ink);
+}
+
+/* Phase 2 collaboration components */
+.collab-page {
+  width: 100%;
+  padding: 48px 0 72px;
+}
+.collab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.collab-header h1 {
+  margin: 12px 0 8px;
+  font-size: clamp(36px, 5vw, 64px);
+  letter-spacing: -0.07em;
+  font-weight: 900;
+}
+.collab-header p {
+  max-width: 650px;
+  line-height: 1.7;
+}
+.collab-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 22px 0;
+}
+.collab-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 3px solid var(--neo-ink);
+  padding: 10px 14px;
+  background: var(--neo-white);
+  box-shadow: 3px 3px 0 var(--neo-ink);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+.collab-tabs a.active,
+.collab-tabs a:hover {
+  background: var(--neo-yellow);
+}
+.collab-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 0.36fr);
+  align-items: start;
+  gap: 24px;
+}
+.collab-stack {
+  display: grid;
+  gap: 18px;
+}
+.collab-card {
+  padding: 22px;
+}
+.collab-card h2,
+.org-card h2,
+.settings-card h2 {
+  margin-top: 0;
+  font-size: 22px;
+  font-weight: 900;
+}
+.collab-list {
+  display: grid;
+  gap: 0;
+}
+.collab-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 18px 0;
+  border-bottom: 2px solid var(--neo-ink);
+}
+.collab-row:last-child {
+  border-bottom: 0;
+}
+.collab-row h3 {
+  margin: 0 0 7px;
+  font-size: 16px;
+  font-weight: 900;
+}
+.collab-row p {
+  margin: 0;
+  color: #333;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.collab-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+  font-size: 11px;
+}
+.collab-chip {
+  display: inline-block;
+  border: 2px solid var(--neo-ink);
+  padding: 4px 8px;
+  background: var(--neo-yellow);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.collab-chip.blue {
+  background: #dbe2ff;
+}
+.collab-chip.coral {
+  background: #ffd4cc;
+}
+.collab-form {
+  display: grid;
+  gap: 12px;
+}
+.collab-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 900;
+}
+.collab-form input,
+.collab-form textarea,
+.collab-form select {
+  width: 100%;
+  padding: 11px 12px;
+}
+.collab-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.collab-form .collab-action {
+  justify-self: start;
+  padding: 11px 15px;
+}
+.collab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.collab-actions .collab-action {
+  padding: 8px 11px;
+}
+.collab-empty {
+  padding: 25px 16px;
+  border: 2px dashed var(--neo-ink);
+  background: #fff;
+  font-weight: 700;
+}
+.org-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 18px;
+}
+.org-card {
+  padding: 20px;
+}
+.org-card p {
+  line-height: 1.6;
+}
+.notification-row {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  margin-bottom: 14px;
+  text-decoration: none;
+}
+.notification-row.unread {
+  border-left: 10px solid var(--neo-blue) !important;
+  background: #f0f2ff !important;
+}
+.notification-row strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+.notification-row small {
+  font-weight: 700;
+  color: #444;
+}
+.access-badge {
+  border: 2px solid var(--neo-ink);
+  padding: 4px 7px;
+  background: var(--neo-violet);
+  font-size: 10px;
+  font-weight: 900;
+}
+.webhook-secret {
+  overflow-wrap: anywhere;
+  padding: 12px;
+  border: 2px dashed var(--neo-ink);
+  background: var(--neo-yellow);
+  font: 12px monospace;
+}
+
+@media (max-width: 850px) {
+  .collab-layout {
+    grid-template-columns: 1fr;
+  }
+  .collab-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+@media (max-width: 640px) {
+  html body .hub-app,
+  html body .page-shell {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  html body .hub-nav {
+    height: auto;
+    min-height: 72px;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 12px 0;
+  }
+  html body .nav-links {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  html body .auth-layout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 32px 0;
+  }
+  html body .auth-intro h1 {
+    font-size: 48px;
+  }
+  html body .form-card {
+    padding: 20px;
+  }
+  .collab-page {
+    padding: 32px 0 50px;
+  }
+  .collab-card {
+    padding: 16px;
+  }
+  .collab-row {
+    flex-direction: column;
+  }
+}
+
+/* Dense team and review controls */
+.repo-collab-nav {
+  margin-top: 12px;
+}
+.repo-collab-nav a {
+  font-size: 11px;
+}
+.label-choice-list,
+.webhook-events {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--neo-ink);
+  background: var(--neo-paper);
+}
+.label-choice-list legend,
+.webhook-events legend {
+  padding: 0 5px;
+  font-weight: 900;
+}
+.label-choice-list label,
+.webhook-events label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.label-choice-list input,
+.webhook-events input {
+  width: auto;
+  accent-color: var(--neo-blue);
+}
+.label-create-form {
+  margin-top: 15px;
+}
+.label-create-form input[type="color"] {
+  width: 100%;
+  min-height: 38px;
+  padding: 3px;
+}
+.org-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.org-card-heading h2 {
+  margin: 0 0 4px;
+}
+.org-avatar {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 3px solid var(--neo-ink);
+  background: var(--neo-yellow);
+  box-shadow: 3px 3px 0 var(--neo-ink);
+  font-size: 22px;
+  font-weight: 900;
+}
+.org-members {
+  display: grid;
+}
+.org-member {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 2px solid var(--neo-ink);
+}
+.org-member:last-child {
+  border-bottom: 0;
+}
+.org-member strong,
+.org-member small {
+  display: block;
+}
+.org-member small {
+  margin-top: 3px;
+  color: #555;
+}
+.org-member-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.org-member-controls select,
+.collab-actions select,
+.review-form select {
+  min-height: 36px;
+  border: 2px solid var(--neo-ink);
+  background: var(--neo-white);
+  font-weight: 800;
+}
+.org-small-button {
+  border: 2px solid var(--neo-ink);
+  padding: 6px 8px;
+  background: var(--neo-yellow);
+  box-shadow: 2px 2px 0 var(--neo-ink);
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.org-small-button.remove {
+  background: var(--neo-coral);
+}
+.org-invite,
+.collaborator-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 3px solid var(--neo-ink);
+}
+.org-repositories {
+  margin: 15px 0;
+  padding: 14px;
+  border: 2px solid var(--neo-ink);
+  background: #f4f1ff;
+}
+.org-repositories h3 {
+  margin: 0 0 9px;
+}
+.org-repo-link {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--neo-ink);
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+.org-repo-link span {
+  font-size: 9px;
+}
+.org-repositories .collab-form {
+  margin-top: 12px;
+}
+.review-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 15px;
+}
+.review-form input {
+  min-width: 180px;
+  flex: 1;
+  min-height: 38px;
+  border: 2px solid var(--neo-ink);
+  padding: 7px 9px;
+  background: var(--neo-paper);
+}
+.review-form .collab-action {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 10px;
+}
+.latest-review {
+  margin-top: 12px;
+  padding: 10px;
+  border: 2px dashed var(--neo-ink);
+  background: #f3efff;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.merge-action {
+  background: var(--neo-lime) !important;
+}
+.merge-sha {
+  display: block;
+  margin-top: 9px;
+  padding: 5px;
+  background: var(--neo-lime);
+  font-size: 10px;
+  font-weight: 900;
+}
+.pull-content {
+  flex: 1;
+  min-width: 0;
+}
+.pull-actions {
+  align-self: flex-start;
+}
+.notification-row a {
+  display: grid;
+  gap: 6px;
+  text-decoration: none;
+}
+.notification-row a:hover strong {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+.notification-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 10px;
+}
+.webhook-card {
+  display: grid;
+  gap: 9px;
+  padding: 14px 0;
+  border-bottom: 2px solid var(--neo-ink);
+}
+.webhook-card:last-child {
+  border-bottom: 0;
+}
+.webhook-card h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.webhook-card .collab-action {
+  justify-self: start;
+  padding: 7px 10px;
+  font-size: 10px;
+}
+@media (max-width: 640px) {
+  .org-card-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .org-member {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .org-member-controls {
+    flex-wrap: wrap;
+  }
+  .review-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .review-form > * {
+    width: 100%;
+  }
+  .pull-actions {
+    width: 100%;
+  }
+}

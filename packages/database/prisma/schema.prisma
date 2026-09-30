@@ -1,0 +1,321 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Better Auth's canonical models. Generate/review schema changes before migration.
+model User {
+  id                   String               @id
+  name                 String
+  email                String               @unique
+  emailVerified        Boolean              @default(false)
+  image                String?
+  username             String?              @unique
+  bio                  String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  sessions             Session[]
+  accounts             Account[]
+  repositories         Repository[]
+  repositoryMembers    RepositoryMember[]
+  createdOrganizations Organization[]       @relation("OrganizationCreator")
+  organizationMembers  OrganizationMember[]
+  openedIssues         Issue[]              @relation("IssueAuthor")
+  assignedIssues       Issue[]              @relation("IssueAssignee")
+  openedPullRequests   PullRequest[]        @relation("PullRequestAuthor")
+  reviews              PullRequestReview[]
+  notifications        Notification[]
+
+  @@map("user")
+}
+
+enum RepositoryVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model Repository {
+  id             String               @id
+  name           String
+  slug           String
+  description    String?
+  visibility     RepositoryVisibility @default(PRIVATE)
+  gitPath        String               @unique
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  ownerId        String?
+  owner          User?                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization?        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members        RepositoryMember[]
+  issues         Issue[]
+  labels         Label[]
+  pullRequests   PullRequest[]
+  webhooks       Webhook[]
+
+  @@unique([ownerId, slug])
+  @@unique([organizationId, slug])
+  @@index([ownerId, createdAt])
+  @@map("repository")
+}
+
+enum RepositoryRole {
+  READ
+  WRITE
+  ADMIN
+}
+
+model RepositoryMember {
+  id           String         @id
+  repositoryId String
+  userId       String
+  role         RepositoryRole @default(READ)
+  createdAt    DateTime       @default(now())
+  repository   Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, userId])
+  @@index([userId, createdAt])
+  @@map("repository_member")
+}
+
+enum IssueState {
+  OPEN
+  CLOSED
+}
+
+model Issue {
+  id           String       @id
+  number       Int
+  title        String
+  body         String       @default("")
+  state        IssueState   @default(OPEN)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  closedAt     DateTime?
+  repositoryId String
+  authorId     String
+  assigneeId   String?
+  repository   Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  author       User         @relation("IssueAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  assignee     User?        @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  labels       IssueLabel[]
+
+  @@unique([repositoryId, number])
+  @@index([repositoryId, state, updatedAt])
+  @@map("issue")
+}
+
+model Label {
+  id           String       @id
+  name         String
+  color        String       @default("FFD93D")
+  description  String?
+  repositoryId String
+  repository   Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  issues       IssueLabel[]
+
+  @@unique([repositoryId, name])
+  @@map("label")
+}
+
+model IssueLabel {
+  issueId String
+  labelId String
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, labelId])
+  @@map("issue_label")
+}
+
+enum PullRequestState {
+  OPEN
+  CLOSED
+  MERGED
+}
+
+model PullRequest {
+  id             String              @id
+  number         Int
+  title          String
+  body           String              @default("")
+  state          PullRequestState    @default(OPEN)
+  baseBranch     String
+  headBranch     String
+  mergeCommitSha String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  closedAt       DateTime?
+  repositoryId   String
+  authorId       String
+  repository     Repository          @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  author         User                @relation("PullRequestAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  reviews        PullRequestReview[]
+
+  @@unique([repositoryId, number])
+  @@index([repositoryId, state, updatedAt])
+  @@map("pull_request")
+}
+
+enum ReviewState {
+  APPROVED
+  COMMENTED
+  CHANGES_REQUESTED
+}
+
+model PullRequestReview {
+  id            String      @id
+  pullRequestId String
+  reviewerId    String
+  state         ReviewState
+  body          String      @default("")
+  createdAt     DateTime    @default(now())
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  reviewer      User        @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+
+  @@index([pullRequestId, createdAt])
+  @@map("pull_request_review")
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Organization {
+  id           String               @id
+  name         String
+  slug         String               @unique
+  description  String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  createdById  String
+  createdBy    User                 @relation("OrganizationCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  members      OrganizationMember[]
+  repositories Repository[]
+
+  @@map("organization")
+}
+
+model OrganizationMember {
+  id             String           @id
+  organizationId String
+  userId         String
+  role           OrganizationRole @default(MEMBER)
+  createdAt      DateTime         @default(now())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId, createdAt])
+  @@map("organization_member")
+}
+
+model Notification {
+  id        String    @id
+  type      String
+  title     String
+  body      String
+  url       String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notification")
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model Webhook {
+  id               String            @id
+  url              String
+  secretCiphertext String
+  secretIv         String
+  secretTag        String
+  events           String[]
+  active           Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  repositoryId     String
+  repository       Repository        @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  deliveries       WebhookDelivery[]
+
+  @@index([repositoryId, active])
+  @@map("webhook")
+}
+
+model WebhookDelivery {
+  id           String                @id
+  webhookId    String
+  event        String
+  payload      String
+  status       WebhookDeliveryStatus @default(PENDING)
+  statusCode   Int?
+  attemptCount Int                   @default(0)
+  lastError    String?
+  createdAt    DateTime              @default(now())
+  deliveredAt  DateTime?
+  webhook      Webhook               @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, createdAt])
+  @@map("webhook_delivery")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}

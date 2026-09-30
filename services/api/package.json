@@ -1,0 +1,27 @@
+{
+  "name": "@nagar/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "lint": "eslint src test",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --import ./test/setup.mjs --import tsx --test test/health.test.ts test/git-http.test.ts test/repository-validation.test.ts test/webhook-security.test.ts test/git-merge.test.ts test/repository-access.test.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.3.0",
+    "@nagar/auth": "workspace:*",
+    "@nagar/database": "workspace:*",
+    "@nagar/types": "workspace:*",
+    "dotenv": "^16.6.1",
+    "fastify": "5.12.5",
+    "better-auth": "1.7.6",
+    "redis": "5.12.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
+}

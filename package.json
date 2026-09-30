@@ -1,0 +1,35 @@
+{
+  "name": "nagar",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=20.9",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "dotenv -e .env -- turbo dev",
+    "build": "dotenv -e .env -- turbo build",
+    "lint": "turbo lint",
+    "typecheck": "dotenv -e .env -- turbo typecheck",
+    "test": "dotenv -e .env -- turbo test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "dotenv -e .env -- pnpm --filter @nagar/database run db:generate",
+    "db:migrate": "dotenv -e .env -- pnpm --filter @nagar/database run db:migrate",
+    "db:studio": "dotenv -e .env -- pnpm --filter @nagar/database run db:studio",
+    "infra:up": "docker compose up -d postgres redis",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.19.0",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.9",
+    "turbo": "^2.11.5",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0"
+  }
+}
