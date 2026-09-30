@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { formatBytes } from "../lib/diff";
 import { HubFrame } from "./hub-frame";
+import { MarkdownBody } from "./markdown";
+import { RepositoryNav } from "./repository-nav";
 
 type TreeEntry = {
   name: string;
@@ -46,13 +47,26 @@ async function apiJson<T>(url: string): Promise<T> {
   return body.data;
 }
 
-export function RepositoryBrowser({ username, slug }: { username: string; slug: string }) {
+type FilePreview =
+  | { kind: "text"; content: string }
+  | { kind: "binary"; size: number }
+  | { kind: "large"; size: number };
+
+export function RepositoryBrowser({
+  username,
+  slug,
+  initialBranch,
+}: {
+  username: string;
+  slug: string;
+  initialBranch?: string;
+}) {
   const [repository, setRepository] = useState<Repository | null>(null);
   const [branch, setBranch] = useState("");
   const [path, setPath] = useState("");
   const [entries, setEntries] = useState<TreeEntry[]>([]);
   const [selectedFile, setSelectedFile] = useState("");
-  const [fileContent, setFileContent] = useState("");
+  const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -72,7 +86,7 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
         setPath("");
         setEntries(data.repository.files);
         setSelectedFile("");
-        setFileContent("");
+        setFilePreview(null);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Repository couldn't be loaded.");
       } finally {
@@ -83,8 +97,8 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
   );
 
   useEffect(() => {
-    void loadRepository();
-  }, [loadRepository]);
+    void loadRepository(initialBranch);
+  }, [loadRepository, initialBranch]);
 
   async function openFolder(nextPath: string) {
     if (!branch) return;
@@ -97,7 +111,7 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
       setPath(nextPath);
       setEntries(data.entries);
       setSelectedFile("");
-      setFileContent("");
+      setFilePreview(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Folder couldn't be opened.");
     }
@@ -110,10 +124,21 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
     setError("");
     try {
       const query = new URLSearchParams({ ref: branch, path: filePath });
-      const data = await apiJson<{ content: string }>(
+      const data = await apiJson<{
+        content: string | null;
+        binary?: boolean;
+        tooLarge?: boolean;
+        size?: number;
+      }>(
         `/api/v1/repositories/${encodeURIComponent(username)}/${encodeURIComponent(slug)}/blob?${query}`,
       );
-      setFileContent(data.content);
+      setFilePreview(
+        data.binary
+          ? { kind: "binary", size: data.size ?? 0 }
+          : data.tooLarge
+            ? { kind: "large", size: data.size ?? 0 }
+            : { kind: "text", content: data.content ?? "" },
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "File couldn't be opened.");
     } finally {
@@ -187,15 +212,7 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
               </div>
             </div>
             <div className="repo-toolbar">
-              <div className="repo-tabs">
-                <span className="active-tab">⌘ Code</span>
-                <span>
-                  ◷ Commits <b>{repository.commits.length}</b>
-                </span>
-                <span>
-                  ⑂ Branches <b>{repository.branches.length}</b>
-                </span>
-              </div>
+              <RepositoryNav username={username} repository={slug} active="code" inline />
               <div className="clone-control">
                 <span>HTTPS</span>
                 <code>{repository.cloneUrl ?? "Git URL unavailable"}</code>
@@ -208,12 +225,6 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
                 </button>
               </div>
             </div>
-
-            <nav className="collab-tabs repo-collab-nav" aria-label="Repository collaboration">
-              <Link href={`/${username}/${slug}/issues`}>Issues →</Link>
-              <Link href={`/${username}/${slug}/pulls`}>Pull requests →</Link>
-              <Link href={`/${username}/${slug}/settings`}>Access & webhooks →</Link>
-            </nav>
             {error && (
               <div className="error-banner compact-error" role="alert">
                 {error}
@@ -317,9 +328,19 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
                     </div>
                     {loadingFile ? (
                       <p className="muted">Loading file…</p>
+                    ) : filePreview?.kind === "binary" ? (
+                      <p className="muted">
+                        Binary file ({formatBytes(filePreview.size)}) — no preview available. Clone
+                        the repository to use it.
+                      </p>
+                    ) : filePreview?.kind === "large" ? (
+                      <p className="muted">
+                        This file is {formatBytes(filePreview.size)}, which is too large to preview
+                        here. Clone the repository to read it.
+                      </p>
                     ) : (
                       <pre className="source-preview">
-                        <code>{fileContent}</code>
+                        <code>{filePreview?.content ?? ""}</code>
                       </pre>
                     )}
                   </section>
@@ -331,7 +352,7 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
                       <span>PREVIEW</span>
                     </div>
                     <article className="markdown-body">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{repository.readme}</ReactMarkdown>
+                      <MarkdownBody>{repository.readme}</MarkdownBody>
                     </article>
                   </section>
                 ) : null}
@@ -342,8 +363,15 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
                   <p className="eyebrow">ABOUT</p>
                   <p>{repository.description || "No description provided."}</p>
                   <div className="side-stats">
-                    <span>⑂ {repository.branches.length} branches</span>
-                    <span>◷ {repository.commits.length} commits shown</span>
+                    <Link href={`/${username}/${slug}/branches`}>
+                      ⑂ {repository.branches.length} branch
+                      {repository.branches.length === 1 ? "" : "es"}
+                    </Link>
+                    <Link
+                      href={`/${username}/${slug}/commits${branch ? `?branch=${encodeURIComponent(branch)}` : ""}`}
+                    >
+                      ◷ Full commit history →
+                    </Link>
                   </div>
                 </section>
                 <section className="side-card">
@@ -368,6 +396,14 @@ export function RepositoryBrowser({ username, slug }: { username: string; slug: 
                     </div>
                   ) : (
                     <p className="side-muted">Commits appear here after your first push.</p>
+                  )}
+                  {repository.commits.length > 0 && (
+                    <Link
+                      className="side-link"
+                      href={`/${username}/${slug}/commits${branch ? `?branch=${encodeURIComponent(branch)}` : ""}`}
+                    >
+                      View all commits →
+                    </Link>
                   )}
                 </section>
                 <section className="side-tip">

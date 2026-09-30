@@ -824,3 +824,167 @@ html body .foundation-card:nth-child(3n) .card-number {
     width: 100%;
   }
 }
+
+/* Repository history, branches, and pull request review */
+.repo-nav-inline {
+  margin: 0;
+}
+.history-branch {
+  align-self: flex-end;
+}
+.sha-chip {
+  flex-shrink: 0;
+  border: 2px solid var(--neo-ink);
+  padding: 3px 7px;
+  background: var(--neo-paper);
+  font: 800 12px monospace;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 2px solid var(--neo-ink);
+}
+.side-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 900;
+}
+.side-stats a {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 800;
+}
+.side-stats a:hover {
+  text-decoration: underline;
+}
+.shared-heading {
+  margin-top: 36px;
+}
+.issue-edit-form {
+  width: 100%;
+}
+.changes-toggle {
+  margin-top: 12px;
+  padding: 6px 10px;
+  font-size: 10px;
+}
+.changes-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 2px solid var(--neo-ink);
+  background: var(--neo-paper);
+}
+.changes-summary {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+.changes-commits,
+.changes-files {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.changes-commits li,
+.changes-files li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.changes-files {
+  padding-top: 10px;
+  border-top: 2px dashed var(--neo-ink);
+}
+.file-status {
+  border: 2px solid var(--neo-ink);
+  padding: 1px 6px;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.file-status.added {
+  background: #d9ffc2;
+}
+.file-status.deleted {
+  background: #ffd4cc;
+}
+.file-status.modified {
+  background: #dbe2ff;
+}
+.stat-add {
+  color: #0a7a1f;
+  font-weight: 900;
+}
+.stat-del {
+  color: #b3261e;
+  font-weight: 900;
+}
+.decision-approved {
+  background: #d9ffc2;
+}
+.decision-changes_requested {
+  background: #ffd4cc;
+}
+.decision-review_required {
+  background: #fff;
+}
+.diff-view {
+  max-height: 560px;
+  margin: 0;
+  overflow: auto;
+  border: 2px solid var(--neo-ink);
+  background: #fff;
+  font:
+    12px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.diff-line {
+  display: block;
+  min-width: max-content;
+  padding: 0 12px;
+  white-space: pre;
+}
+.diff-line.add {
+  background: #d9ffc2;
+}
+.diff-line.del {
+  background: #ffd4cc;
+}
+.diff-line.hunk {
+  background: #dbe2ff;
+  font-weight: 800;
+}
+.diff-line.file {
+  margin-top: 8px;
+  background: var(--neo-yellow);
+  font-weight: 900;
+}
+.diff-line.file:first-child {
+  margin-top: 0;
+}
+.diff-line.meta {
+  color: #555;
+}
+@media (max-width: 640px) {
+  .pager {
+    flex-wrap: wrap;
+  }
+  .history-branch {
+    align-self: flex-start;
+  }
+}

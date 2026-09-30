@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 export function Brand({ product }: { product?: string }) {
   return (
@@ -26,12 +26,18 @@ export function ProductShell({
   index,
   tagline,
   actions,
+  note = "NAGAR PLATFORM · PHASE 2",
+  status = "Phase 2 · Hub Collaboration",
   children,
 }: {
   product: string;
   index: string;
   tagline: ReactNode;
   actions?: ReactNode;
+  /** Top-right label. Defaults describe NagarHub; products still in planning should say so. */
+  note?: string;
+  /** Status pill next to the call to action. */
+  status?: string;
   children: ReactNode;
 }) {
   return (
@@ -39,7 +45,12 @@ export function ProductShell({
       <header className="topbar">
         <Brand product={product} />
         <span className="topbar-note">
-          NAGAR PLATFORM <i>·</i> PHASE 2
+          {note.split(" · ").map((part, position) => (
+            <Fragment key={part}>
+              {position > 0 && <i>·</i>}
+              {part}
+            </Fragment>
+          ))}
         </span>
       </header>
       <section className="hero">
@@ -57,7 +68,7 @@ export function ProductShell({
                 Explore platform <span>↗</span>
               </a>
             )}
-            <StatusPill>Phase 2 · Hub Collaboration</StatusPill>
+            <StatusPill>{status}</StatusPill>
           </div>
         </div>
         <div className="hero-art" aria-hidden="true">

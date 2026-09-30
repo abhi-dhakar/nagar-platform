@@ -1,6 +1,21 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "REDIS_URL",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "TRUSTED_ORIGINS",
+    "CORS_ORIGINS",
+    "API_HOST",
+    "API_PORT",
+    "TRUST_PROXY",
+    "NAGAR_GIT_ROOT",
+    "NAGAR_GIT_BASE_URL",
+    "NAGAR_WEBHOOK_ENCRYPTION_KEY",
+    "NAGAR_REQUIRE_DB_TESTS"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -18,8 +33,7 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "dependsOn": ["^build"]
     },
     "db:generate": {
       "cache": false

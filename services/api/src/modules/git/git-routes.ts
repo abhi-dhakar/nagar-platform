@@ -5,9 +5,9 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { currentUserId } from "../auth/current-user.js";
 import { repositoryRole } from "../repositories/repository-access.js";
 import { gitStore } from "../repositories/repository-routes.js";
-import { dispatchRepositoryEvent } from "../collaboration/events.js";
 import { normalizeRepositorySlug, normalizeUsername } from "../repositories/validation.js";
 import { runGitHttpBackend } from "./git-http.js";
+import { publishPushEvents } from "./push-events.js";
 
 interface GitParams {
   username: string;
@@ -172,7 +172,13 @@ export const gitRoutes: FastifyPluginAsync = async (app) => {
       }
       if (repositoryRecord.visibility === "PRIVATE" && !role) return unauthorized(reply);
 
+      // Only the POST that carries the pack can change refs. The preceding
+      // `info/refs?service=git-receive-pack` request is just the authenticated advertisement.
+      const isPush = request.method === "POST" && tail === "git-receive-pack";
       try {
+        const refsBefore = isPush
+          ? await gitStore.refSnapshot(repositoryRecord.gitPath).catch(() => null)
+          : null;
         const backend = await runGitHttpBackend({
           method: request.method,
           url: request.url,
@@ -183,17 +189,37 @@ export const gitRoutes: FastifyPluginAsync = async (app) => {
           remoteAddress: request.ip,
           ...(userId ? { remoteUser: userId } : {}),
         });
-        if (isWrite && backend.statusCode >= 200 && backend.statusCode < 300) {
-          await prisma.repository
-            .update({ where: { id: repositoryRecord.id }, data: { updatedAt: new Date() } })
-            .catch((error: unknown) =>
-              request.log.warn({ err: error }, "Could not refresh repository activity time"),
-            );
-          dispatchRepositoryEvent(repositoryRecord.id, "push", {
-            actorId: userId,
-            receivedAt: new Date().toISOString(),
-            repositoryId: repositoryRecord.id,
-          });
+        if (isPush && refsBefore && backend.statusCode >= 200 && backend.statusCode < 300) {
+          // A 2xx response can still mean "every ref update was rejected", so compare real refs.
+          const refsAfter = await gitStore.refSnapshot(repositoryRecord.gitPath).catch(() => null);
+          if (refsAfter) {
+            const pusher = userId
+              ? await prisma.user
+                  .findUnique({ where: { id: userId }, select: { username: true } })
+                  .catch(() => null)
+              : null;
+            const changed = await publishPushEvents(
+              gitStore,
+              {
+                repositoryId: repositoryRecord.id,
+                storageKey: repositoryRecord.gitPath,
+                repository: { name: slug, owner: username },
+                pusher: { id: userId, username: pusher?.username ?? null },
+              },
+              refsBefore,
+              refsAfter,
+            ).catch((error: unknown) => {
+              request.log.warn({ err: error }, "Could not publish push events");
+              return 0;
+            });
+            if (changed > 0) {
+              await prisma.repository
+                .update({ where: { id: repositoryRecord.id }, data: { updatedAt: new Date() } })
+                .catch((error: unknown) =>
+                  request.log.warn({ err: error }, "Could not refresh repository activity time"),
+                );
+            }
+          }
         }
         reply.status(backend.statusCode);
         for (const [name, value] of backend.headers) reply.header(name, value);

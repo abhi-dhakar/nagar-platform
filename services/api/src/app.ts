@@ -5,10 +5,13 @@ import type { ApiFailure, ApiSuccess, HealthData } from "@nagar/types";
 import { fromNodeHeaders } from "better-auth/node";
 import Fastify, { type FastifyInstance } from "fastify";
 import { createClient } from "redis";
+import { notFoundResponse, toErrorResponse } from "./lib/error-response.js";
+import { parseTrustProxy } from "./lib/trust-proxy.js";
 import { currentUserId } from "./modules/auth/current-user.js";
 import { gitRoutes } from "./modules/git/git-routes.js";
 import { profileRoutes } from "./modules/users/profile-routes.js";
 import { repositoryRoutes } from "./modules/repositories/repository-routes.js";
+import { historyRoutes } from "./modules/repositories/history-routes.js";
 import { collaborationRoutes } from "./modules/collaboration/repository-routes.js";
 import { organizationRoutes } from "./modules/collaboration/organization-routes.js";
 import { notificationRoutes } from "./modules/collaboration/notification-routes.js";
@@ -41,7 +44,13 @@ async function checkRedis(): Promise<void> {
 }
 
 export async function createApiServer(): Promise<FastifyInstance> {
-  app = Fastify({ logger: process.env.NODE_ENV !== "test", trustProxy: false });
+  app = Fastify({
+    // LOG_LEVEL (trace … fatal, or silent) overrides the default of logging everywhere but tests.
+    logger: process.env.LOG_LEVEL
+      ? { level: process.env.LOG_LEVEL }
+      : process.env.NODE_ENV !== "test",
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  });
 
   await app.register(cors, {
     origin: origins,
@@ -52,18 +61,15 @@ export async function createApiServer(): Promise<FastifyInstance> {
   });
 
   app.setErrorHandler((error, request, reply) => {
-    request.log.error({ err: error }, "Request failed");
-    const status =
-      typeof error === "object" &&
-      error !== null &&
-      "statusCode" in error &&
-      typeof error.statusCode === "number" &&
-      error.statusCode >= 400
-        ? error.statusCode
-        : 500;
-    return reply
-      .status(status)
-      .send(failure("INTERNAL_ERROR", "The request could not be completed."));
+    const response = toErrorResponse(error);
+    if (response.status >= 500) request.log.error({ err: error }, "Request failed");
+    else request.log.info({ err: error }, "Request rejected");
+    return reply.status(response.status).send(response.body);
+  });
+
+  app.setNotFoundHandler((_request, reply) => {
+    const response = notFoundResponse();
+    return reply.status(response.status).send(response.body);
   });
 
   app.get<{ Reply: ApiSuccess<HealthData> }>("/api/v1/health", async () =>
@@ -96,6 +102,7 @@ export async function createApiServer(): Promise<FastifyInstance> {
 
   await app.register(profileRoutes);
   await app.register(repositoryRoutes);
+  await app.register(historyRoutes);
   await app.register(collaborationRoutes);
   await app.register(organizationRoutes);
   await app.register(notificationRoutes);

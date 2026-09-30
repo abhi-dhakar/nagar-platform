@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # The same services docker-compose.yml provides locally. The integration tests drive the
+    # real API against this PostgreSQL and the real `git` binary (preinstalled on the runner).
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: nagar
+          POSTGRES_PASSWORD: nagar_local_only
+          POSTGRES_DB: nagar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nagar -d nagar"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    # Job-level variables win over anything in a .env file (dotenv never overrides), and these
+    # values are for CI only: the secrets below protect nothing.
+    env:
+      DATABASE_URL: postgresql://nagar:nagar_local_only@localhost:5432/nagar?schema=public
+      REDIS_URL: redis://localhost:6379
+      BETTER_AUTH_SECRET: ci-only-secret-0123456789-0123456789-0123456789
+      BETTER_AUTH_URL: http://localhost:4000
+      TRUSTED_ORIGINS: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000
+      NAGAR_WEBHOOK_ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      # A missing database must fail the build, not silently skip the integration tests.
+      NAGAR_REQUIRE_DB_TESTS: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+      TURBO_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The pnpm version comes from the "packageManager" field in package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Apply database migrations
+        run: pnpm db:deploy
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

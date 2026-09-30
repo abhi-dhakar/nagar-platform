@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 3000",
     "lint": "eslint src",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node test/run.mjs"
   },
   "dependencies": {
     "@nagar/ui": "workspace:*",
@@ -18,8 +19,11 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^22.19.0",
     "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3"
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^26.1.0",
+    "tsx": "^4.20.6"
   }
 }

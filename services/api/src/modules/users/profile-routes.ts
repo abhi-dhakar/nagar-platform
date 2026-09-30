@@ -1,6 +1,7 @@
 import { prisma } from "@nagar/database";
 import type { ApiFailure, ApiSuccess } from "@nagar/types";
 import type { FastifyPluginAsync } from "fastify";
+import { isReservedNamespace } from "../../lib/reserved-names.js";
 import { currentUserId } from "../auth/current-user.js";
 import { normalizeUsername, stringField } from "../repositories/validation.js";
 
@@ -60,6 +61,23 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       return reply
         .status(400)
         .send(failure("INVALID_PROFILE", "Check username, name, and bio lengths and formats."));
+    }
+    if (username && isReservedNamespace(username)) {
+      const current = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { username: true },
+      });
+      // Only block *claiming* a reserved name; an account that already holds it keeps working.
+      if (current?.username !== username) {
+        return reply
+          .status(409)
+          .send(
+            failure(
+              "NAMESPACE_RESERVED",
+              "That name is reserved by NagarHub. Please choose another username.",
+            ),
+          );
+      }
     }
     if (
       username &&

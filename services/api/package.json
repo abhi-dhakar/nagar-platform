@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "lint": "eslint src test",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --import ./test/setup.mjs --import tsx --test test/health.test.ts test/git-http.test.ts test/repository-validation.test.ts test/webhook-security.test.ts test/git-merge.test.ts test/repository-access.test.ts"
+    "test": "node test/run.mjs"
   },
   "dependencies": {
     "@fastify/cors": "11.3.0",

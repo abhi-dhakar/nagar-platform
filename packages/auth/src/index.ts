@@ -6,6 +6,11 @@ const secret = process.env.BETTER_AUTH_SECRET;
 if (!secret || secret.length < 32) {
   throw new Error("BETTER_AUTH_SECRET must be set to a random value of at least 32 characters.");
 }
+// `.env.example` ships a long placeholder so local setup is obvious; it must never sign
+// production sessions.
+if (process.env.NODE_ENV === "production" && /^replace[-_]/i.test(secret)) {
+  throw new Error("BETTER_AUTH_SECRET is still the .env.example placeholder. Generate a real one.");
+}
 
 const trustedOrigins = (process.env.TRUSTED_ORIGINS ?? "http://localhost:3000")
   .split(",")
