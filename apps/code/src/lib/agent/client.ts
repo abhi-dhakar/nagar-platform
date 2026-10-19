@@ -7,6 +7,11 @@ import type {
   AgentStatus,
   BrowseResult,
   CreateTerminalRequest,
+  GitBranch,
+  GitCloneResponse,
+  GitLogResponse,
+  GitRemote,
+  GitStatus,
   ListEntriesResponse,
   ListFilesResponse,
   ListTerminalsResponse,
@@ -345,5 +350,120 @@ export class AgentClient {
 
   terminalProtocols(): string[] {
     return ["nagarcode-agent.v1", `nagarcode-token.${this.token}`];
+  }
+
+  // ── Git ──────────────────────────────────────────────────────────
+
+  gitStatus(workspaceId: string): Promise<{ status: GitStatus }> {
+    return this.request<{ status: GitStatus }>("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/status`);
+  }
+
+  gitInit(workspaceId: string, branch?: string): Promise<{ initialized: boolean; branch: string | null }> {
+    const body = branch ? { branch } : {};
+    return this.request<{ initialized: boolean; branch: string | null }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/init`, body);
+  }
+
+  gitAdd(workspaceId: string, paths: string[]): Promise<{ ok: true; status: GitStatus }> {
+    return this.request<{ ok: true; status: GitStatus }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/add`, { paths });
+  }
+
+  gitReset(workspaceId: string, paths: string[]): Promise<{ ok: true; status: GitStatus }> {
+    return this.request<{ ok: true; status: GitStatus }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/reset`, { paths });
+  }
+
+  gitRestore(workspaceId: string, path: string): Promise<{ ok: true; status: GitStatus }> {
+    return this.request<{ ok: true; status: GitStatus }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/restore`, { path });
+  }
+
+  gitDiff(workspaceId: string, opts: { path?: string; staged?: boolean } = {}): Promise<{ diff: string }> {
+    const params = new URLSearchParams();
+    if (opts.path) params.set("path", opts.path);
+    if (opts.staged) params.set("staged", "1");
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return this.request<{ diff: string }>("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/diff${suffix}`);
+  }
+
+  gitCommit(workspaceId: string, message: string, author?: { name: string; email: string }): Promise<{ sha: string; message: string; status: GitStatus }> {
+    return this.request<{ sha: string; message: string; status: GitStatus }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/commit`, {
+      message,
+      ...(author?.name ? { authorName: author.name } : {}),
+      ...(author?.email ? { authorEmail: author.email } : {}),
+    });
+  }
+
+  gitLog(workspaceId: string, opts: { limit?: number; skip?: number; branch?: string } = {}): Promise<GitLogResponse> {
+    const params = new URLSearchParams();
+    if (opts.limit) params.set("limit", String(opts.limit));
+    if (opts.skip) params.set("skip", String(opts.skip));
+    if (opts.branch) params.set("branch", opts.branch);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return this.request<GitLogResponse>("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/log${suffix}`);
+  }
+
+  gitBranches(workspaceId: string): Promise<{ branches: GitBranch[] }> {
+    return this.request<{ branches: GitBranch[] }>("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/branches`);
+  }
+
+  gitCreateBranch(workspaceId: string, name: string, opts: { checkout?: boolean; startPoint?: string } = {}): Promise<{ ok: true; branches: GitBranch[] }> {
+    return this.request<{ ok: true; branches: GitBranch[] }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/branches`, {
+      name,
+      ...opts,
+    });
+  }
+
+  gitCheckout(workspaceId: string, name: string, create?: boolean): Promise<{ ok: true; status: GitStatus; branches: GitBranch[] }> {
+    return this.request<{ ok: true; status: GitStatus; branches: GitBranch[] }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/branch/checkout`, {
+      name,
+      ...(create ? { create: true } : {}),
+    });
+  }
+
+  gitDeleteBranch(workspaceId: string, name: string, force?: boolean): Promise<{ ok: true; branches: GitBranch[] }> {
+    const suffix = force ? "?force=1" : "";
+    return this.request<{ ok: true; branches: GitBranch[] }>("DELETE", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/branches/${encodeURIComponent(name)}${suffix}`);
+  }
+
+  gitMerge(workspaceId: string, branch: string, message?: string): Promise<{ sha?: string; merged: boolean; conflicted?: string[]; message?: string; status?: GitStatus }> {
+    return this.request<{ sha?: string; merged: boolean; conflicted?: string[]; message?: string; status?: GitStatus }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/merge`, {
+      branch,
+      ...(message ? { message } : {}),
+    });
+  }
+
+  gitRemotes(workspaceId: string): Promise<{ remotes: GitRemote[] }> {
+    return this.request<{ remotes: GitRemote[] }>("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/remotes`);
+  }
+
+  gitAddRemote(workspaceId: string, name: string, url: string): Promise<{ ok: true; remotes: GitRemote[] }> {
+    return this.request<{ ok: true; remotes: GitRemote[] }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/remotes`, { name, url });
+  }
+
+  gitRemoveRemote(workspaceId: string, name: string): Promise<{ ok: true; remotes: GitRemote[] }> {
+    return this.request<{ ok: true; remotes: GitRemote[] }>("DELETE", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/remotes/${encodeURIComponent(name)}`);
+  }
+
+  gitFetch(workspaceId: string, opts: { remote?: string; branch?: string; credentials?: { username: string; password: string } } = {}): Promise<{ output: string }> {
+    return this.request<{ output: string }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/fetch`, opts);
+  }
+
+  gitPull(workspaceId: string, opts: { remote?: string; branch?: string; credentials?: { username: string; password: string }; rebase?: boolean } = {}): Promise<{ output: string; conflicted?: string[] }> {
+    return this.request<{ output: string; conflicted?: string[] }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/pull`, opts);
+  }
+
+  gitPush(workspaceId: string, opts: { remote?: string; branch?: string; setUpstream?: boolean; credentials?: { username: string; password: string }; force?: boolean } = {}): Promise<{ output: string }> {
+    return this.request<{ output: string }>("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/push`, opts);
+  }
+
+  gitConfigGet(workspaceId: string, key?: string): Promise<{ key?: string; value?: string | null; config?: Record<string, string> }> {
+    const suffix = key ? `?key=${encodeURIComponent(key)}` : "";
+    return this.request<{ key?: string; value?: string | null; config?: Record<string, string> }>("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/config${suffix}`);
+  }
+
+  gitConfigSet(workspaceId: string, key: string, value: string): Promise<{ ok: true; key: string; value: string }> {
+    return this.request<{ ok: true; key: string; value: string }>("PUT", `/api/workspaces/${encodeURIComponent(workspaceId)}/git/config`, { key, value });
+  }
+
+  gitClone(url: string, targetPath: string, opts: { branch?: string; credentials?: { username: string; password: string } } = {}): Promise<GitCloneResponse> {
+    return this.request<GitCloneResponse>("POST", "/api/git/clone", { url, targetPath, ...opts });
   }
 }

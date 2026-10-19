@@ -4,8 +4,11 @@ import type { ActivityId } from "./ActivityBar";
 import { Explorer } from "./Explorer";
 import { SearchPanel } from "./SearchPanel";
 import { SettingsPanel } from "./SettingsPanel";
-import { Placeholder } from "./Placeholder";
+import { SourceControlPanel } from "./SourceControlPanel";
+import { NagarHubPanel } from "./NagarHubPanel";
+import { PreviewPanel } from "./PreviewPanel";
 import type { WorkspaceEntry, WorkspaceService } from "@/lib/workspace/types";
+import type { AgentClient } from "@/lib/agent/client";
 
 export function Sidebar({
   active,
@@ -21,6 +24,11 @@ export function Sidebar({
   onRefresh,
   isSupported,
   onOpenFile,
+  agentClient,
+  workspaceId,
+  workspaceRoot,
+  onOpenWorkspace,
+  notify,
 }: {
   active: ActivityId;
   workspace: WorkspaceService | null;
@@ -35,6 +43,11 @@ export function Sidebar({
   onRefresh: () => void;
   isSupported: boolean;
   onOpenFile: (path: string, line?: number) => void;
+  agentClient: AgentClient | null;
+  workspaceId: string | null;
+  workspaceRoot: string | null;
+  onOpenWorkspace: (path: string) => Promise<void>;
+  notify: (msg: string, kind?: "success" | "error" | "info") => void;
 }) {
   return (
     <div className="ide-sidebar">
@@ -55,31 +68,18 @@ export function Sidebar({
       ) : null}
       {active === "search" ? <SearchPanel workspace={workspace} onOpenFile={onOpenFile} /> : null}
       {active === "scm" ? (
-        <Placeholder
-          icon="⎇"
-          title="Source Control"
-          description="Git status, staging, commit and push will live here later. Git is intentionally out of scope in this phase and no Git commands are executed."
-          hint="NagarHub repositories and the workspace Git service come in a future phase."
-        />
+        <SourceControlPanel client={agentClient} workspaceId={workspaceId} onRefreshExplorer={onRefresh} notify={notify} />
       ) : null}
       {active === "nagarhub" ? (
-        <Placeholder
-          icon="⬢"
-          title="NagarHub"
-          description="Clone, open and publish to NagarHub directly from NagarCode. This integration is planned — it will use your single Nagar identity."
-          hint="For now, open any local folder with “Open Folder” in the Explorer."
-          action={
-            <a
-              className="ide-secondary-btn"
-              href="http://localhost:3000"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open NagarHub
-            </a>
-          }
+        <NagarHubPanel
+          client={agentClient}
+          workspaceId={workspaceId}
+          workspaceRoot={workspaceRoot}
+          onOpenWorkspace={onOpenWorkspace}
+          notify={notify}
         />
       ) : null}
+      {active === "preview" ? <PreviewPanel /> : null}
       {active === "settings" ? <SettingsPanel /> : null}
     </div>
   );
