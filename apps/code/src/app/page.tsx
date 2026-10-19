@@ -50,6 +50,7 @@ function IDEInner() {
 
   // Editor cursor
   const [cursor, setCursor] = useState<{ line: number; col: number } | null>(null);
+  const [revealLine, setRevealLine] = useState<number | null>(null);
   const editorRef = useRef<unknown>(null);
   const monacoRef = useRef<unknown>(null);
 
@@ -197,7 +198,7 @@ function IDEInner() {
   }, []);
 
   const openFile = useCallback(
-    async (path: string, _line?: number) => {
+    async (path: string, line?: number) => {
       if (!workspace) return;
       const normalized = normalizePath(path);
       // Check if tab already open
@@ -206,6 +207,16 @@ function IDEInner() {
         setActiveId(existing.id);
         setSelectedPath(normalized);
         pushRecent(normalized);
+        if (line) {
+          setRevealLine(line);
+          // Also try to reveal via editor instance directly
+          const ed = editorRef.current as unknown as { revealLineInCenter?: (n: number) => void; setPosition?: (p: { lineNumber: number; column: number }) => void } | null;
+          if (ed?.revealLineInCenter) {
+            try { ed.revealLineInCenter(line); ed.setPosition?.({ lineNumber: line, column: 1 }); } catch {
+              // ignore editor errors
+            }
+          }
+        }
         return;
       }
       try {
@@ -224,6 +235,7 @@ function IDEInner() {
         setActiveId(id);
         setSelectedPath(normalized);
         pushRecent(normalized);
+        if (line) setRevealLine(line);
       } catch (e) {
         pushToast(e instanceof Error ? e.message : String(e), "error");
       }
@@ -708,6 +720,31 @@ function IDEInner() {
         e.preventDefault();
         setCommandOpen((v) => !v);
       }
+      // Ctrl+P quick open
+      if (isMod && !e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setActiveActivity("search");
+        setCommandOpen(true);
+      }
+      // Ctrl+G go to line
+      if (isMod && e.key.toLowerCase() === "g") {
+        e.preventDefault();
+        const lineStr = prompt("Go to line:");
+        if (lineStr) {
+          const lineNum = parseInt(lineStr, 10);
+          if (lineNum && activeTab) {
+            // Use Monaco to go to line
+            const ed = editorRef.current as unknown as { revealLineInCenter?: (n: number) => void; setPosition?: (p: { lineNumber: number; column: number }) => void; focus?: () => void } | null;
+            if (ed?.revealLineInCenter) {
+              ed.revealLineInCenter(lineNum);
+              ed.setPosition?.({ lineNumber: lineNum, column: 1 });
+              ed.focus?.();
+            }
+          } else if (lineNum) {
+            pushToast("Open a file first", "info");
+          }
+        }
+      }
       // Ctrl+W close tab
       if (isMod && e.key.toLowerCase() === "w") {
         e.preventDefault();
@@ -731,7 +768,7 @@ function IDEInner() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleSave, activeId, handleCloseTab]);
+  }, [handleSave, activeId, handleCloseTab, activeTab]);
 
   // Prevent unload if dirty
   useEffect(() => {
@@ -881,6 +918,29 @@ function IDEInner() {
         run: () => activeId && handleCloseTab(activeId),
       },
       {
+        id: "search.quickOpen",
+        label: "Quick Open File…",
+        category: "Search",
+        shortcut: "Ctrl+P",
+        run: () => setActiveActivity("search"),
+      },
+      {
+        id: "search.goToLine",
+        label: "Go to Line…",
+        category: "Search",
+        shortcut: "Ctrl+G",
+        run: () => {
+          setActiveActivity("search");
+          pushToast("Enter line in Search panel → Go to line", "info");
+        },
+      },
+      {
+        id: "search.replace",
+        label: "Search and Replace",
+        category: "Search",
+        run: () => setActiveActivity("search"),
+      },
+      {
         id: "editor.closeAll",
         label: "Close All Editors",
         category: "Editor",
@@ -938,6 +998,14 @@ function IDEInner() {
   const [recent, setRecent] = useState<string[]>([]);
   useEffect(() => setRecent(loadRecent()), [tabs]);
 
+  // Clear revealLine after navigation to avoid sticky scroll
+  useEffect(() => {
+    if (revealLine !== null) {
+      const t = setTimeout(() => setRevealLine(null), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [revealLine, activeId]);
+
   const settingsSummary = `${settings.tabSize} spaces · ${settings.wordWrap === "off" ? "no wrap" : "wrap"} · ${settings.minimap ? "minimap" : "no minimap"}`;
 
   return (
@@ -967,6 +1035,11 @@ function IDEInner() {
             onRefresh={refreshAll}
             isSupported={isSupported || agent.state === "connected"}
             onOpenFile={openFile}
+            agentClient={agent.client}
+            workspaceId={agent.workspace?.id ?? null}
+            workspaceRoot={agent.workspace?.root ?? null}
+            onOpenWorkspace={handleOpenAgentWorkspace}
+            notify={pushToast}
           />
           <div
             className="ide-sidebar-resizer"
@@ -1024,6 +1097,7 @@ function IDEInner() {
                 value={activeTab.content}
                 onChange={handleEditorChange}
                 onSave={handleSave}
+                revealLine={revealLine}
                 onMount={(editor, monaco) => {
                   editorRef.current = editor;
                   monacoRef.current = monaco;
@@ -1037,6 +1111,16 @@ function IDEInner() {
                     ed.onDidChangeCursorPosition((e) =>
                       setCursor({ line: e.position.lineNumber, col: e.position.column }),
                     );
+                  }
+                  // If there's a pending reveal line, apply now
+                  if (revealLine) {
+                    try {
+                      const editorAny = editor as unknown as { revealLineInCenter: (n: number) => void; setPosition: (p: { lineNumber: number; column: number }) => void };
+                      editorAny.revealLineInCenter(revealLine);
+                      editorAny.setPosition({ lineNumber: revealLine, column: 1 });
+                    } catch {
+                      // ignore monaco errors
+                    }
                   }
                 }}
               />

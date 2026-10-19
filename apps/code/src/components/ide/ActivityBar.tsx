@@ -1,8 +1,8 @@
 "use client";
 
-import { IconExplorer, IconGit, IconHub, IconSearch, IconSettings } from "./Icons";
+import { IconExplorer, IconGit, IconHub, IconPreview, IconSearch, IconSettings } from "./Icons";
 
-export type ActivityId = "explorer" | "search" | "scm" | "nagarhub" | "settings";
+export type ActivityId = "explorer" | "search" | "scm" | "nagarhub" | "preview" | "settings";
 
 const items: {
   id: ActivityId;
@@ -14,6 +14,7 @@ const items: {
   { id: "search", label: "Search", shortcut: "Ctrl+Shift+F", Icon: IconSearch },
   { id: "scm", label: "Source Control", Icon: IconGit },
   { id: "nagarhub", label: "NagarHub", Icon: IconHub },
+  { id: "preview", label: "Preview", Icon: IconPreview },
   { id: "settings", label: "Settings", shortcut: "Ctrl+,", Icon: IconSettings },
 ];
 

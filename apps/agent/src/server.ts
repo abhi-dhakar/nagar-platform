@@ -31,6 +31,7 @@ import { detectShells, findShell } from "./terminals/shells.js";
 import { TerminalManager, normalizeTerminalSize } from "./terminals/manager.js";
 import { WorkspaceManager } from "./workspace.js";
 import { AGENT_VERSION } from "./version.js";
+import * as gitOps from "./git.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -455,6 +456,323 @@ export async function startAgent(
         }
         return;
       }
+    }
+
+    // Git operations — workspace-local via the host's git binary
+    // Helper to extract and validate credentials from request body
+    const parseCredentials = (body: JsonObject): undefined | { username: string; password: string } => {
+      const creds = body.credentials;
+      if (!creds) return undefined;
+      if (typeof creds !== "object" || creds === null || Array.isArray(creds)) {
+        throw new AgentError("INVALID_REQUEST", "credentials must be an object with username and password");
+      }
+      const obj = creds as Record<string, unknown>;
+      const username = typeof obj.username === "string" ? obj.username.trim() : "";
+      const password = typeof obj.password === "string" ? obj.password : "";
+      if (!username && !password) return undefined;
+      if (!username || !password) throw new AgentError("INVALID_REQUEST", "Both username and password are required for Git authentication.");
+      return { username, password };
+    };
+
+    // Global clone: POST /api/git/clone  { url, targetPath, credentials?, branch? }
+    if (segments[0] === "api" && segments[1] === "git" && segments[2] === "clone" && segments.length === 3) {
+      if (method !== "POST") throw new AgentError("INVALID_REQUEST", "POST required for clone");
+      const body = bodyObject(await readJson(req));
+      const urlStr = stringField(body, "url");
+      const targetPath = stringField(body, "targetPath");
+      const branch = stringField(body, "branch", true);
+      const credentials = parseCredentials(body);
+      // Validate targetPath is absolute and inside allowed roots
+      const candidate = path.resolve(targetPath);
+      if (!path.isAbsolute(candidate)) throw new AgentError("INVALID_REQUEST", "Clone target must be an absolute path.");
+      // Check allowed roots before creating anything: candidate or its parent must be inside allowed roots
+      const parentCandidate = path.dirname(candidate);
+      const isInside = (p: string) => findContainingRoot(config.allowedRoots, p) !== null;
+      if (!isInside(candidate) && !isInside(parentCandidate)) {
+        // Also try realpath of parent if it exists
+        try {
+          const realParent = await fs.realpath(parentCandidate);
+          if (!isInside(realParent) && !isInside(candidate)) {
+            throw new AgentError("FORBIDDEN_PATH", `Clone target is outside allowed roots: ${config.allowedRoots.join(", ")}`);
+          }
+        } catch (e) {
+          if (e instanceof AgentError) throw e;
+          // Parent doesn't exist yet - check candidate string containment via prefix (already did)
+          // Find nearest existing ancestor
+          let ancestor = parentCandidate;
+          let foundInside = false;
+          for (let i = 0; i < 10; i++) {
+            if (isInside(ancestor)) { foundInside = true; break; }
+            const next = path.dirname(ancestor);
+            if (next === ancestor) break;
+            ancestor = next;
+            try {
+              const real = await fs.realpath(ancestor);
+              if (isInside(real)) { foundInside = true; break; }
+            } catch { /* ancestor doesn't exist, continue */ }
+          }
+          if (!foundInside) {
+            throw new AgentError("FORBIDDEN_PATH", `Clone target is outside allowed roots: ${config.allowedRoots.join(", ")}`);
+          }
+        }
+      }
+      if (!urlStr.trim()) throw new AgentError("INVALID_REQUEST", "Clone URL is required");
+      await gitOps.gitClone(urlStr.trim(), candidate, { ...(branch ? { branch } : {}), ...(credentials ? { credentials } : {}) });
+      // Try to open as workspace if clone succeeded
+      let workspace: import("@nagar/agent-protocol").WorkspaceSummary | null = null;
+      try {
+        workspace = await workspaces.open(candidate);
+      } catch {
+        // clone succeeded but open failed — still return success with path
+      }
+      sendJson(res, 200, { ok: true, targetPath: candidate, workspace }, origin);
+      return;
+    }
+
+    // Workspace Git: /api/workspaces/:id/git/*
+    if (segments[0] === "api" && segments[1] === "workspaces" && segments[3] === "git") {
+      const workspaceId = segments[2];
+      if (!workspaceId) throw new AgentError("WORKSPACE_NOT_FOUND", "Missing workspace id");
+      const gitRest = segments.slice(4).join("/");
+      const workspaceRoot = workspaces.getRoot(workspaceId);
+
+      // GET /api/workspaces/:id/git/status
+      if (method === "GET" && gitRest === "status") {
+        const status = await gitOps.getGitStatus(workspaceRoot);
+        sendJson(res, 200, { status }, origin);
+        return;
+      }
+
+      // POST /api/workspaces/:id/git/init
+      if (method === "POST" && gitRest === "init") {
+        let branch: string | undefined;
+        try {
+          const body = bodyObject(await readJson(req));
+          branch = typeof body.branch === "string" ? body.branch.trim() : undefined;
+        } catch {
+          // empty body is okay, default to main
+        }
+        const queryBranch = url.searchParams.get("branch") ?? undefined;
+        const targetBranch = branch || queryBranch || "main";
+        const result = await gitOps.gitInit(workspaceRoot, targetBranch || "main");
+        sendJson(res, 200, result, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "add") {
+        const body = bodyObject(await readJson(req));
+        const paths = body.paths;
+        if (!Array.isArray(paths) || paths.length === 0) throw new AgentError("INVALID_REQUEST", "Provide paths to stage.");
+        const normalizedPaths = paths.map((p) => {
+          if (typeof p !== "string") throw new AgentError("INVALID_REQUEST", "Each path must be a string.");
+          return normalizeWorkspacePath(p).replace(/^\//, "");
+        });
+        // Allow "." for all
+        await gitOps.gitAdd(workspaceRoot, normalizedPaths);
+        const status = await gitOps.getGitStatus(workspaceRoot);
+        sendJson(res, 200, { ok: true, status }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "reset") {
+        const body = bodyObject(await readJson(req));
+        const paths = body.paths;
+        if (!Array.isArray(paths) || paths.length === 0) throw new AgentError("INVALID_REQUEST", "Provide paths to unstage.");
+        const normalizedPaths = paths.map((p) => {
+          if (typeof p !== "string") throw new AgentError("INVALID_REQUEST", "Each path must be a string.");
+          // Unstage supports workspace-relative without leading slash? git wants relative path
+          if (p === ".") return ".";
+          return normalizeWorkspacePath(p).replace(/^\//, "");
+        });
+        await gitOps.gitReset(workspaceRoot, normalizedPaths);
+        const status = await gitOps.getGitStatus(workspaceRoot);
+        sendJson(res, 200, { ok: true, status }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "restore") {
+        const body = bodyObject(await readJson(req));
+        const pathParam = stringField(body, "path");
+        const normalized = normalizeWorkspacePath(pathParam).replace(/^\//, "");
+        await gitOps.gitCheckoutDiscard(workspaceRoot, [normalized]);
+        const status = await gitOps.getGitStatus(workspaceRoot);
+        sendJson(res, 200, { ok: true, status }, origin);
+        return;
+      }
+
+      if (method === "GET" && gitRest === "diff") {
+        const pathParam = url.searchParams.get("path") ?? undefined;
+        const staged = url.searchParams.get("staged") === "true" || url.searchParams.get("staged") === "1";
+        const normalized = pathParam ? normalizeWorkspacePath(pathParam).replace(/^\//, "") : undefined;
+        const diff = await gitOps.gitDiff(workspaceRoot, { ...(normalized ? { path: normalized } : {}), staged });
+        sendJson(res, 200, { diff }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "commit") {
+        const body = bodyObject(await readJson(req));
+        const message = stringField(body, "message");
+        const authorName = typeof body.authorName === "string" ? body.authorName : undefined;
+        const authorEmail = typeof body.authorEmail === "string" ? body.authorEmail : undefined;
+        const author = authorName && authorEmail ? { name: authorName, email: authorEmail } : undefined;
+        const sha = await gitOps.gitCommit(workspaceRoot, message, author);
+        const status = await gitOps.getGitStatus(workspaceRoot);
+        sendJson(res, 200, { sha, message, status }, origin);
+        return;
+      }
+
+      if (method === "GET" && gitRest === "log") {
+        const limitParam = url.searchParams.get("limit");
+        const skipParam = url.searchParams.get("skip");
+        const branch = url.searchParams.get("branch") ?? undefined;
+        const limit = limitParam ? parseInt(limitParam, 10) : 50;
+        const skip = skipParam ? parseInt(skipParam, 10) : 0;
+        const result = await gitOps.gitLog(workspaceRoot, {
+          limit: isNaN(limit) ? 50 : limit,
+          skip: isNaN(skip) ? 0 : skip,
+          ...(branch ? { branch } : {}),
+        });
+        sendJson(res, 200, result, origin);
+        return;
+      }
+
+      if (method === "GET" && gitRest === "branches") {
+        const branches = await gitOps.gitBranches(workspaceRoot);
+        sendJson(res, 200, { branches }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "branches") {
+        const body = bodyObject(await readJson(req));
+        const name = stringField(body, "name");
+        const checkout = body.checkout === true;
+        const startPoint = typeof body.startPoint === "string" ? body.startPoint : undefined;
+        await gitOps.gitCreateBranch(workspaceRoot, name, startPoint);
+        if (checkout) await gitOps.gitCheckout(workspaceRoot, name, false);
+        const branches = await gitOps.gitBranches(workspaceRoot);
+        sendJson(res, 200, { ok: true, branches }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "branch/checkout") {
+        const body = bodyObject(await readJson(req));
+        const name = stringField(body, "name");
+        const create = body.create === true;
+        await gitOps.gitCheckout(workspaceRoot, name, create);
+        const status = await gitOps.getGitStatus(workspaceRoot);
+        const branches = await gitOps.gitBranches(workspaceRoot);
+        sendJson(res, 200, { ok: true, status, branches }, origin);
+        return;
+      }
+
+      if (method === "DELETE" && gitRest.startsWith("branches/")) {
+        const branchName = decodeURIComponent(gitRest.slice("branches/".length));
+        if (!branchName) throw new AgentError("INVALID_REQUEST", "Branch name required");
+        const force = url.searchParams.get("force") === "true" || url.searchParams.get("force") === "1";
+        await gitOps.gitDeleteBranch(workspaceRoot, branchName, force);
+        const branches = await gitOps.gitBranches(workspaceRoot);
+        sendJson(res, 200, { ok: true, branches }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "merge") {
+        const body = bodyObject(await readJson(req));
+        const branch = stringField(body, "branch");
+        const message = typeof body.message === "string" ? body.message : undefined;
+        const result = await gitOps.gitMerge(workspaceRoot, branch, message);
+        if (!result.merged && result.conflicted) {
+          sendJson(res, 409, { ...result, error: { code: "GIT_CONFLICT", message: result.message ?? "Merge conflict" } }, origin);
+          return;
+        }
+        const status = await gitOps.getGitStatus(workspaceRoot);
+        sendJson(res, 200, { ...result, status }, origin);
+        return;
+      }
+
+      if (method === "GET" && gitRest === "remotes") {
+        const remotes = await gitOps.gitRemotes(workspaceRoot);
+        sendJson(res, 200, { remotes }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "remotes") {
+        const body = bodyObject(await readJson(req));
+        const name = stringField(body, "name");
+        const urlStr = stringField(body, "url");
+        await gitOps.gitAddRemote(workspaceRoot, name, urlStr);
+        const remotes = await gitOps.gitRemotes(workspaceRoot);
+        sendJson(res, 200, { ok: true, remotes }, origin);
+        return;
+      }
+
+      if (method === "DELETE" && gitRest.startsWith("remotes/")) {
+        const remoteName = decodeURIComponent(gitRest.slice("remotes/".length));
+        if (!remoteName) throw new AgentError("INVALID_REQUEST", "Remote name required");
+        await gitOps.gitRemoveRemote(workspaceRoot, remoteName);
+        const remotes = await gitOps.gitRemotes(workspaceRoot);
+        sendJson(res, 200, { ok: true, remotes }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "fetch") {
+        const body = bodyObject(await readJson(req));
+        const remote = typeof body.remote === "string" ? body.remote : undefined;
+        const branch = typeof body.branch === "string" ? body.branch : undefined;
+        const credentials = parseCredentials(body);
+        const output = await gitOps.gitFetch(workspaceRoot, { ...(remote ? { remote } : {}), ...(branch ? { branch } : {}), ...(credentials ? { credentials } : {}) });
+        sendJson(res, 200, { output }, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "pull") {
+        const body = bodyObject(await readJson(req));
+        const remote = typeof body.remote === "string" ? body.remote : undefined;
+        const branch = typeof body.branch === "string" ? body.branch : undefined;
+        const credentials = parseCredentials(body);
+        const rebase = body.rebase === true;
+        const result = await gitOps.gitPull(workspaceRoot, { ...(remote ? { remote } : {}), ...(branch ? { branch } : {}), ...(credentials ? { credentials } : {}), rebase });
+        if (result.conflicted && result.conflicted.length > 0) {
+          sendJson(res, 409, { ...result, error: { code: "GIT_CONFLICT", message: "Pull resulted in merge conflicts" } }, origin);
+          return;
+        }
+        sendJson(res, 200, result, origin);
+        return;
+      }
+
+      if (method === "POST" && gitRest === "push") {
+        const body = bodyObject(await readJson(req));
+        const remote = typeof body.remote === "string" ? body.remote : undefined;
+        const branch = typeof body.branch === "string" ? body.branch : undefined;
+        const credentials = parseCredentials(body);
+        const setUpstream = body.setUpstream === true;
+        const force = body.force === true;
+        const output = await gitOps.gitPush(workspaceRoot, { ...(remote ? { remote } : {}), ...(branch ? { branch } : {}), setUpstream, force, ...(credentials ? { credentials } : {}) });
+        sendJson(res, 200, { output }, origin);
+        return;
+      }
+
+      if ((method === "GET" || method === "PUT") && gitRest === "config") {
+        if (method === "GET") {
+          const key = url.searchParams.get("key");
+          if (key) {
+            const value = await gitOps.gitConfig(workspaceRoot, key);
+            sendJson(res, 200, { key, value }, origin);
+            return;
+          }
+          const all = await gitOps.gitConfigList(workspaceRoot);
+          sendJson(res, 200, { config: all }, origin);
+          return;
+        } else {
+          const body = bodyObject(await readJson(req));
+          const key = stringField(body, "key");
+          const value = stringField(body, "value");
+          await gitOps.gitConfig(workspaceRoot, key, value);
+          sendJson(res, 200, { ok: true, key, value }, origin);
+          return;
+        }
+      }
+
+      throw new AgentError("NOT_FOUND", `Unknown Git endpoint: ${gitRest}`);
     }
 
     // Terminal sessions.

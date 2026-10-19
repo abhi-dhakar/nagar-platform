@@ -12,11 +12,13 @@ type Props = {
   onChange: (val: string) => void;
   onSave: () => void;
   onMount?: (editor: unknown, monaco: unknown) => void;
+  revealLine?: number | null;
 };
 
-export function MonacoEditor({ path, language, value, onChange, onSave, onMount }: Props) {
+export function MonacoEditor({ path, language, value, onChange, onSave, onMount, revealLine }: Props) {
   const { settings } = useSettings();
   const editorRef = useRef<unknown>(null);
+  const monacoInstanceRef = useRef<unknown>(null);
 
   useEffect(() => {
     // Configure Monaco themes once
@@ -79,6 +81,7 @@ export function MonacoEditor({ path, language, value, onChange, onSave, onMount 
 
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
+    monacoInstanceRef.current = monaco;
     // Expose editor for parent if needed
     onMount?.(editor, monaco);
 
@@ -90,6 +93,19 @@ export function MonacoEditor({ path, language, value, onChange, onSave, onMount 
     // Ensure find widget works; Monaco already binds Ctrl+F
     editor.focus();
   };
+
+  useEffect(() => {
+    if (revealLine && editorRef.current) {
+      const editor = editorRef.current as unknown as { revealLineInCenter: (n: number) => void; setPosition: (p: { lineNumber: number; column: number }) => void; focus: () => void };
+      try {
+        editor.revealLineInCenter(revealLine);
+        editor.setPosition({ lineNumber: revealLine, column: 1 });
+        editor.focus();
+      } catch {
+        // ignore monaco errors
+      }
+    }
+  }, [revealLine, path]);
 
   // Map settings to Monaco theme id
   const monacoTheme =

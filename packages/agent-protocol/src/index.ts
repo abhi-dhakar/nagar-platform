@@ -33,6 +33,9 @@ export type AgentErrorCode =
   | "RUNTIME_UNAVAILABLE"
   | "COMPILE_ERROR"
   | "UNSUPPORTED_LANGUAGE"
+  | "GIT_ERROR"
+  | "GIT_CONFLICT"
+  | "GIT_NOT_REPO"
   | "INTERNAL_ERROR";
 
 export type AgentErrorBody = {
@@ -241,4 +244,171 @@ export type ListTerminalsResponse = {
 
 export type RuntimesResponse = {
   runtimes: RuntimeAvailability[];
+};
+
+// ─────────────────────────────────────────────────────────────
+// Git types — workspace-local Git via the agent's `git` binary
+// ─────────────────────────────────────────────────────────────
+
+export type GitCredentials = {
+  username?: string;
+  password?: string;
+};
+
+export type GitStatusFile = {
+  path: string;
+  /** Original path for renames/copies */
+  originalPath?: string;
+  staged: string; // e.g. "M", "A", "D", "R", " ", "?"
+  unstaged: string;
+  status: string; // combined XY code
+};
+
+export type GitStatus = {
+  isRepo: boolean;
+  branch: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  staged: GitStatusFile[];
+  unstaged: GitStatusFile[];
+  untracked: string[];
+  conflicted: string[];
+  hasChanges: boolean;
+};
+
+export type GitBranch = {
+  name: string;
+  current: boolean;
+  upstream?: string | null;
+  commit: string;
+  commitMessage: string;
+};
+
+export type GitCommit = {
+  sha: string;
+  shortSha: string;
+  author: string;
+  email: string;
+  date: string;
+  message: string;
+  parents: string[];
+};
+
+export type GitLogResponse = {
+  commits: GitCommit[];
+  hasMore: boolean;
+  total?: number;
+};
+
+export type GitRemote = {
+  name: string;
+  fetchUrl: string;
+  pushUrl: string;
+};
+
+export type GitDiff = {
+  path: string;
+  diff: string;
+  truncated: boolean;
+};
+
+export type GitInitResponse = {
+  initialized: boolean;
+  branch: string | null;
+};
+
+export type GitCommitResponse = {
+  sha: string;
+  message: string;
+};
+
+export type GitMergeResponse = {
+  sha?: string;
+  merged: boolean;
+  conflicted?: string[];
+  message?: string;
+};
+
+export type GitCloneRequest = {
+  url: string;
+  targetPath: string;
+  credentials?: GitCredentials;
+  branch?: string;
+};
+
+export type GitCloneResponse = {
+  ok: boolean;
+  targetPath: string;
+  workspace: WorkspaceSummary | null;
+};
+
+export type GitFetchResponse = {
+  output: string;
+};
+
+export type GitPullResponse = {
+  output: string;
+  conflicted?: string[];
+};
+
+export type GitPushResponse = {
+  output: string;
+};
+
+export type GitRemoteAddRequest = {
+  name: string;
+  url: string;
+};
+
+export type GitBranchCreateRequest = {
+  name: string;
+  checkout?: boolean;
+  startPoint?: string;
+};
+
+export type GitCheckoutRequest = {
+  name: string;
+  create?: boolean;
+};
+
+export type GitCommitRequest = {
+  message: string;
+  authorName?: string;
+  authorEmail?: string;
+};
+
+export type GitStageRequest = {
+  paths: string[];
+};
+
+export type GitDiffRequest = {
+  path?: string;
+  staged?: boolean;
+};
+
+export type GitMergeRequest = {
+  branch: string;
+  message?: string;
+};
+
+export type GitFetchRequest = {
+  remote?: string;
+  branch?: string;
+  credentials?: GitCredentials;
+};
+
+export type GitPushRequest = {
+  remote?: string;
+  branch?: string;
+  setUpstream?: boolean;
+  credentials?: GitCredentials;
+  force?: boolean;
+};
+
+export type GitPullRequest = {
+  remote?: string;
+  branch?: string;
+  credentials?: GitCredentials;
+  rebase?: boolean;
 };
