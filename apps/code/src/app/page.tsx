@@ -73,7 +73,12 @@ function IDEInner() {
     | { type: "confirm"; title: string; message: string; onConfirm: () => void }
   >(null);
 
-  const isSupported = useMemo(() => isFsAccessSupported(), []);
+  // Keep the initial render identical on the server and client. The browser
+  // capability is resolved after hydration.
+  const [isSupported, setIsSupported] = useState(false);
+  useEffect(() => {
+    setIsSupported(isFsAccessSupported());
+  }, []);
 
   const activeTab = useMemo(() => tabs.find((t) => t.id === activeId) ?? null, [tabs, activeId]);
 
