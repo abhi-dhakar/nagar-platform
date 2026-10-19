@@ -58,8 +58,8 @@ export function Sidebar({
         <Placeholder
           icon="⎇"
           title="Source Control"
-          description="Git status, staging, commit and push will live here. In Phase 1 this panel is a placeholder — no Git commands are executed."
-          hint="Phase 2 will connect to NagarHub repositories and the workspace Git service."
+          description="Git status, staging, commit and push will live here later. Git is intentionally out of scope in this phase and no Git commands are executed."
+          hint="NagarHub repositories and the workspace Git service come in a future phase."
         />
       ) : null}
       {active === "nagarhub" ? (
@@ -69,7 +69,12 @@ export function Sidebar({
           description="Clone, open and publish to NagarHub directly from NagarCode. This integration is planned — it will use your single Nagar identity."
           hint="For now, open any local folder with “Open Folder” in the Explorer."
           action={
-            <a className="ide-secondary-btn" href="http://localhost:3000" target="_blank" rel="noreferrer">
+            <a
+              className="ide-secondary-btn"
+              href="http://localhost:3000"
+              target="_blank"
+              rel="noreferrer"
+            >
               Open NagarHub
             </a>
           }

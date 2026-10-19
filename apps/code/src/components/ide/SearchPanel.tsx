@@ -23,7 +23,10 @@ export function SearchPanel({
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const service = useMemo(() => (workspace ? createWorkspaceSearchService(workspace) : null), [workspace]);
+  const service = useMemo(
+    () => (workspace ? createWorkspaceSearchService(workspace) : null),
+    [workspace],
+  );
 
   const canSearch = query.trim().length > 0 && !!service;
 
@@ -135,7 +138,9 @@ export function SearchPanel({
         </details>
 
         {!workspace ? (
-          <p className="ide-muted small">Open a folder to search across real files. Demo workspace search works too.</p>
+          <p className="ide-muted small">
+            Open a folder to search across real files. Demo workspace search works too.
+          </p>
         ) : null}
 
         {error ? <div className="ide-error">{error}</div> : null}
@@ -144,10 +149,16 @@ export function SearchPanel({
           {searching ? <span className="ide-muted">Searching…</span> : null}
           {!searching && results ? (
             <span className="ide-muted">
-              {totalMatches === 0 ? "No results" : `${totalMatches} result${totalMatches === 1 ? "" : "s"} in ${results.length} file${results.length === 1 ? "" : "s"}`}
+              {totalMatches === 0
+                ? "No results"
+                : `${totalMatches} result${totalMatches === 1 ? "" : "s"} in ${results.length} file${results.length === 1 ? "" : "s"}`}
             </span>
           ) : null}
-          <button className="ide-secondary-btn small" onClick={doSearch} disabled={!canSearch || searching}>
+          <button
+            className="ide-secondary-btn small"
+            onClick={doSearch}
+            disabled={!canSearch || searching}
+          >
             Search
           </button>
         </div>
@@ -156,8 +167,12 @@ export function SearchPanel({
       <div className="ide-search-results">
         {!query ? (
           <div className="ide-search-empty">
-            <p className="ide-muted">Type to search. Regular expressions, case and whole-word toggles are supported.</p>
-            <p className="ide-muted small">This search runs locally via the workspace service — no server is required.</p>
+            <p className="ide-muted">
+              Type to search. Regular expressions, case and whole-word toggles are supported.
+            </p>
+            <p className="ide-muted small">
+              This search runs locally via the workspace service — no server is required.
+            </p>
           </div>
         ) : results && results.length > 0 ? (
           results.map((group) => (
@@ -195,8 +210,9 @@ export function SearchPanel({
 
       <div className="ide-search-foot">
         <p className="ide-muted small">
-          <strong>Service interface:</strong> <code>SearchService.search(options)</code> — implemented for the active
-          workspace; ready to be swapped for a worker-based index in Phase 2.
+          <strong>Service interface:</strong> <code>SearchService.search(options)</code> —
+          implemented for the active workspace; ready to be swapped for a worker-based index in
+          Phase 2.
         </p>
       </div>
     </div>

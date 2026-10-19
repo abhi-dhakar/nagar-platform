@@ -6,7 +6,9 @@ import { Sidebar } from "@/components/ide/Sidebar";
 import { EditorTabs, type Tab } from "@/components/ide/EditorTabs";
 import { MonacoEditor } from "@/components/ide/MonacoEditor";
 import { StatusBar } from "@/components/ide/StatusBar";
-import { BottomPanel } from "@/components/ide/BottomPanel";
+import { BottomPanel, type BottomTabId } from "@/components/ide/BottomPanel";
+import { AgentDialog } from "@/components/ide/AgentDialog";
+import { EditorToolbar } from "@/components/ide/EditorToolbar";
 import { CommandPalette, type Command } from "@/components/ide/CommandPalette";
 import { SettingsProvider, useSettings } from "@/lib/settings/context";
 import { isFsAccessSupported, openNativeFolder } from "@/lib/workspace/fs-access";
@@ -15,6 +17,19 @@ import type { WorkspaceEntry, WorkspaceService } from "@/lib/workspace/types";
 import { normalizePath, joinPath, dirname, basename } from "@/lib/workspace/types";
 import { getLanguageFromPath } from "@/lib/utils";
 import { pushRecent, loadRecent } from "@/lib/recentFiles";
+import { useAgent } from "@/lib/agent/useAgent";
+import { useTerminals } from "@/lib/agent/useTerminals";
+import {
+  runtimeForPath,
+  runtimeAvailability,
+  runtimeUnavailableMessage,
+} from "@/lib/agent/runtime";
+import {
+  acknowledgeLocalExecution,
+  hasAcknowledgedLocalExecution,
+  parsePairingHash,
+  type PairingDetails,
+} from "@/lib/agent/storage";
 
 type Toast = { id: string; message: string; kind: "success" | "error" | "info" };
 
@@ -22,8 +37,7 @@ function IDEInner() {
   const { settings } = useSettings();
 
   // Workspace
-  const [workspace, setWorkspace] = useState<WorkspaceService | null>(null);
-  const [workspaceName, setWorkspaceName] = useState<string | null>(null);
+  const [browserWorkspace, setBrowserWorkspace] = useState<WorkspaceService | null>(null);
 
   // Explorer state
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["/"]));
@@ -47,7 +61,14 @@ function IDEInner() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [modal, setModal] = useState<
     | null
-    | { type: "prompt"; title: string; message: string; placeholder?: string; defaultValue?: string; onConfirm: (v: string) => void }
+    | {
+        type: "prompt";
+        title: string;
+        message: string;
+        placeholder?: string;
+        defaultValue?: string;
+        onConfirm: (v: string) => void;
+      }
     | { type: "confirm"; title: string; message: string; onConfirm: () => void }
   >(null);
 
@@ -61,11 +82,35 @@ function IDEInner() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
   }, []);
 
+  // Local development agent: real files, terminals, and runtimes on this machine.
+  const agent = useAgent({ notify: pushToast });
+  const terminals = useTerminals({
+    client: agent.client,
+    workspace: agent.workspace,
+    notify: pushToast,
+  });
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [pairing, setPairing] = useState<PairingDetails | null>(null);
+  const [bottomTab, setBottomTab] = useState<BottomTabId>("terminal");
+  const [saving, setSaving] = useState(false);
+
+  // An agent workspace takes precedence over the browser-backed fallback. If the
+  // agent drops unexpectedly, keep the last service bound so a save fails with a
+  // clear "agent unreachable" error instead of silently writing into the demo
+  // workspace. An explicit Disconnect clears this binding.
+  const lastAgentService = useRef<WorkspaceService | null>(agent.service);
+  useEffect(() => {
+    if (agent.service) lastAgentService.current = agent.service;
+  }, [agent.service]);
+  const keepAgentBinding = agent.service === null && agent.workspace !== null;
+  const workspace =
+    agent.service ?? (keepAgentBinding ? lastAgentService.current : browserWorkspace);
+  const workspaceName = workspace?.name ?? null;
+
   // Initialize with demo workspace
   useEffect(() => {
     const demo = createDemoWorkspace();
-    setWorkspace(demo);
-    setWorkspaceName(demo.name);
+    setBrowserWorkspace(demo);
     // Expand src by default
     setExpanded(new Set(["/", "/src", "/src/components"]));
   }, []);
@@ -74,16 +119,51 @@ function IDEInner() {
     window.dispatchEvent(new Event("nagar:refresh:all"));
   }, []);
 
-  const handleOpenFolder = useCallback(async () => {
+  // Pair with an agent from `#agent=<url>&token=<token>`, then strip the fragment
+  // so the token is not left in the address bar, history, or screenshots.
+  useEffect(() => {
+    const details = parsePairingHash(window.location.hash);
+    if (!details) return;
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    setPairing(details);
+    void (async () => {
+      const ok = await agent.connect(details.url, details.token);
+      setAgentDialogOpen(true);
+      if (ok) pushToast("Paired with the local agent. Open a workspace to begin.", "success");
+    })();
+    // Runs once for the initial page load; agent.connect is stable for this effect.
+  }, []);
+
+  // Switching to a different agent workspace invalidates open tabs.
+  const lastAgentWorkspace = useRef<string | null>(null);
+  const activeAgentWorkspaceId = agent.workspace?.id ?? null;
+  useEffect(() => {
+    if (activeAgentWorkspaceId === lastAgentWorkspace.current) return;
+    lastAgentWorkspace.current = activeAgentWorkspaceId;
+    if (!activeAgentWorkspaceId) return;
+    setTabs([]);
+    setActiveId(null);
+    setExpanded(new Set(["/"]));
+    setSelectedPath("/");
+    refreshAll();
+  }, [activeAgentWorkspaceId, refreshAll]);
+
+  const openBrowserFolder = useCallback(async () => {
+    // Choosing the browser fallback detaches a remembered (offline) agent
+    // workspace so files and saves cannot be silently retargeted.
+    if (agent.workspace && agent.state !== "connected") {
+      await agent.disconnect();
+      lastAgentService.current = null;
+    }
     if (isFsAccessSupported()) {
       try {
         const ws = await openNativeFolder();
         if (!ws) return; // cancelled
-        setWorkspace(ws);
-        setWorkspaceName(ws.name);
+        setBrowserWorkspace(ws);
         setExpanded(new Set(["/"]));
         setSelectedPath("/");
-        pushToast(`Opened “${ws.name}”`, "success");
+        setAgentDialogOpen(false);
+        pushToast(`Opened “${ws.name}” with the browser File System Access API`, "success");
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes("Permission")) {
@@ -93,17 +173,28 @@ function IDEInner() {
         }
       }
     } else {
-      // Fallback: if already has workspace, just show info; else create empty memory
-      if (workspace && !workspace.isNative) {
-        pushToast("Your browser uses the in-memory workspace. Use Chrome or Edge for local folder access.", "info");
+      if (browserWorkspace && !browserWorkspace.isNative) {
+        pushToast(
+          "This browser uses an in-memory workspace. Connect the local agent for real files, or use Chrome/Edge.",
+          "info",
+        );
         return;
       }
       const mem = createDemoWorkspace();
-      setWorkspace(mem);
-      setWorkspaceName(mem.name);
-      pushToast("Using in-memory workspace (this tab). Open in Chrome/Edge for real folder access.", "info");
+      setBrowserWorkspace(mem);
+      setAgentDialogOpen(false);
+      pushToast(
+        "Using the in-memory workspace (this tab). Connect the local agent for real files and a terminal.",
+        "info",
+      );
     }
-  }, [pushToast, workspace]);
+  }, [agent, browserWorkspace, pushToast]);
+
+  const handleOpenFolder = useCallback(() => {
+    // Opening a folder goes through the agent dialog: it can start/connect an
+    // agent, pick an authorized root, or fall back to the browser FS API.
+    setAgentDialogOpen(true);
+  }, []);
 
   const openFile = useCallback(
     async (path: string, _line?: number) => {
@@ -163,8 +254,7 @@ function IDEInner() {
         const mem = createEmptyMemoryWorkspace("Untitled");
         const path = `/${name || "untitled.ts"}`;
         await mem.createFile(path, content);
-        setWorkspace(mem);
-        setWorkspaceName(mem.name);
+        setBrowserWorkspace(mem);
         setExpanded(new Set(["/"]));
         refreshAll();
         openFile(path);
@@ -255,7 +345,8 @@ function IDEInner() {
         refreshAll();
         // Close tabs for deleted path
         setTabs((prev) => prev.filter((t) => t.path !== n && !t.path.startsWith(n + "/")));
-        if (selectedPath === n || (selectedPath && selectedPath.startsWith(n + "/"))) setSelectedPath(null);
+        if (selectedPath === n || (selectedPath && selectedPath.startsWith(n + "/")))
+          setSelectedPath(null);
         pushToast(`Deleted ${path}`, "success");
       } catch (e) {
         pushToast(e instanceof Error ? e.message : String(e), "error");
@@ -269,16 +360,169 @@ function IDEInner() {
       pushToast("No file to save", "info");
       return;
     }
+    setSaving(true);
     try {
       await workspace.writeFile(activeTab.path, activeTab.content);
       setTabs((prev) =>
-        prev.map((t) => (t.id === activeTab.id ? { ...t, savedContent: t.content, isDirty: false } : t)),
+        prev.map((t) =>
+          t.id === activeTab.id ? { ...t, savedContent: t.content, isDirty: false } : t,
+        ),
       );
       pushToast(`Saved ${activeTab.path}`, "success");
     } catch (e) {
       pushToast(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setSaving(false);
     }
   }, [workspace, activeTab, pushToast]);
+
+  // Executing code on the user's machine always needs an explicit warning once.
+  const ensureLocalExecutionTrust = useCallback((message: string, action: () => void) => {
+    if (hasAcknowledgedLocalExecution()) {
+      action();
+      return;
+    }
+    setModal({
+      type: "confirm",
+      title: "Execute code on your computer?",
+      message: `${message} Commands and programs run with your user permissions through the local agent. Only run code you trust.`,
+      onConfirm: () => {
+        acknowledgeLocalExecution();
+        setModal(null);
+        action();
+      },
+    });
+  }, []);
+
+  const activeRuntimeId = useMemo(() => runtimeForPath(activeTab?.path), [activeTab?.path]);
+  const activeRuntime = runtimeAvailability(agent.runtimes, activeRuntimeId);
+  const activeRunSession = useMemo(() => {
+    if (!activeTab) return null;
+    const matches = terminals.sessions.filter(
+      (session) => session.kind === "run" && session.filePath === activeTab.path,
+    );
+    return matches[matches.length - 1] ?? null;
+  }, [activeTab, terminals.sessions]);
+  const activeFileRunning = activeRunSession?.status === "running";
+
+  const handleRun = useCallback(() => {
+    if (!activeTab) {
+      pushToast("Open a file first.", "info");
+      return;
+    }
+    if (activeTab.isUntitled) {
+      pushToast("Save this file into the workspace before running it.", "info");
+      return;
+    }
+    const runtimeId = runtimeForPath(activeTab.path);
+    if (!runtimeId) {
+      pushToast("Run supports .js/.mjs/.cjs, .ts/.mts/.cts, and .py files in this phase.", "info");
+      return;
+    }
+    if (agent.state !== "connected" || !agent.client || !agent.workspace || !workspace) {
+      setAgentDialogOpen(true);
+      pushToast("Connect the local agent and open a workspace before running code.", "info");
+      return;
+    }
+    const runtime = runtimeAvailability(agent.runtimes, runtimeId);
+    if (!runtime?.available) {
+      setAgentDialogOpen(true);
+      pushToast(runtimeUnavailableMessage(runtime, runtimeId), "error");
+      return;
+    }
+    const tab = activeTab;
+    const service = workspace;
+    const pythonPath = agent.pythonPath;
+    ensureLocalExecutionTrust(
+      `About to run ${tab.path} with ${runtime.label}${runtime.version ? ` (${runtime.version})` : ""}.`,
+      () => {
+        void (async () => {
+          setBottomOpen(true);
+          setBottomTab("terminal");
+          if (tab.isDirty) {
+            try {
+              await service.writeFile(tab.path, tab.content);
+              setTabs((prev) =>
+                prev.map((item) =>
+                  item.id === tab.id
+                    ? { ...item, savedContent: item.content, isDirty: false }
+                    : item,
+                ),
+              );
+              pushToast(`Saved ${tab.path} before running`, "success");
+            } catch (error) {
+              pushToast(error instanceof Error ? error.message : String(error), "error");
+              return;
+            }
+          }
+          try {
+            await terminals.runFile({
+              path: tab.path,
+              runtime: runtimeId,
+              ...(pythonPath ? { pythonPath } : {}),
+            });
+          } catch (error) {
+            pushToast(error instanceof Error ? error.message : String(error), "error");
+          }
+        })();
+      },
+    );
+  }, [activeTab, agent, ensureLocalExecutionTrust, pushToast, terminals, workspace]);
+
+  const handleStopRun = useCallback(() => {
+    if (!activeRunSession) return;
+    void terminals.closeTerminal(activeRunSession.id);
+  }, [activeRunSession, terminals]);
+
+  const handleNewTerminal = useCallback(
+    (shellId?: string) => {
+      ensureLocalExecutionTrust("A real shell will start in the current workspace.", () => {
+        setBottomOpen(true);
+        setBottomTab("terminal");
+        void terminals.createTerminal(shellId ? { shellId } : {});
+      });
+    },
+    [ensureLocalExecutionTrust, terminals],
+  );
+
+  const handleShowTerminals = useCallback(() => {
+    setBottomOpen(true);
+    setBottomTab("terminal");
+    setAgentDialogOpen(false);
+  }, []);
+
+  const handleOpenAgentWorkspace = useCallback(
+    async (path: string) => {
+      const summary = await agent.openWorkspace(path);
+      if (summary) {
+        setAgentDialogOpen(false);
+        pushToast(`Opened local workspace ${summary.root}`, "success");
+      }
+    },
+    [agent, pushToast],
+  );
+
+  const leaveAgentWorkspace = useCallback(() => {
+    setTabs([]);
+    setActiveId(null);
+    setSelectedPath(null);
+    setExpanded(new Set(["/"]));
+    lastAgentService.current = null;
+  }, []);
+
+  const handleDisconnect = useCallback(async () => {
+    await terminals.closeAll();
+    await agent.disconnect();
+    leaveAgentWorkspace();
+    pushToast("Disconnected from the local agent. Its terminal processes were stopped.", "info");
+  }, [agent, leaveAgentWorkspace, terminals, pushToast]);
+
+  const handleForget = useCallback(async () => {
+    await terminals.closeAll();
+    await agent.disconnect({ forget: true });
+    leaveAgentWorkspace();
+    pushToast("Disconnected and removed the saved agent token.", "info");
+  }, [agent, leaveAgentWorkspace, terminals, pushToast]);
 
   const handleEditorChange = useCallback(
     (val: string) => {
@@ -437,7 +681,11 @@ function IDEInner() {
       workspace
         .writeFile(activeTab.path, activeTab.content)
         .then(() => {
-          setTabs((prev) => prev.map((c) => (c.id === activeTab.id ? { ...c, savedContent: c.content, isDirty: false } : c)));
+          setTabs((prev) =>
+            prev.map((c) =>
+              c.id === activeTab.id ? { ...c, savedContent: c.content, isDirty: false } : c,
+            ),
+          );
         })
         .catch(() => {
           // ignore
@@ -506,7 +754,8 @@ function IDEInner() {
         label: "New File…",
         category: "File",
         shortcut: "—",
-        run: () => handleContextAction("newFile", selectedPath ? dirname(selectedPath) : "/", undefined),
+        run: () =>
+          handleContextAction("newFile", selectedPath ? dirname(selectedPath) : "/", undefined),
       },
       {
         id: "file.openFolder",
@@ -537,6 +786,30 @@ function IDEInner() {
           setTabs((prev) => prev.map((t) => ({ ...t, savedContent: t.content, isDirty: false })));
           pushToast("Saved all files", "success");
         },
+      },
+      {
+        id: "run.activeFile",
+        label: "Run Active File",
+        category: "Run",
+        run: handleRun,
+      },
+      {
+        id: "terminal.new",
+        label: "New Terminal",
+        category: "Terminal",
+        run: () => handleNewTerminal(),
+      },
+      {
+        id: "terminal.show",
+        label: "Show Terminal",
+        category: "Terminal",
+        run: handleShowTerminals,
+      },
+      {
+        id: "agent.open",
+        label: "Local Agent…",
+        category: "Agent",
+        run: () => setAgentDialogOpen(true),
       },
       {
         id: "view.explorer",
@@ -631,7 +904,23 @@ function IDEInner() {
         },
       },
     ],
-    [handleOpenFolder, handleSave, tabs, activeId, handleCloseTab, refreshAll, settings.minimap, settings.wordWrap, bottomOpen, pushToast, handleContextAction, selectedPath],
+    [
+      handleOpenFolder,
+      handleSave,
+      tabs,
+      activeId,
+      handleCloseTab,
+      refreshAll,
+      settings.minimap,
+      settings.wordWrap,
+      bottomOpen,
+      pushToast,
+      handleContextAction,
+      selectedPath,
+      handleRun,
+      handleNewTerminal,
+      handleShowTerminals,
+    ],
   );
 
   // Listen for toggle events from command palette
@@ -676,7 +965,7 @@ function IDEInner() {
             selectedPath={selectedPath}
             onAction={handleContextAction}
             onRefresh={refreshAll}
-            isSupported={isSupported}
+            isSupported={isSupported || agent.state === "connected"}
             onOpenFile={openFile}
           />
           <div
@@ -716,6 +1005,18 @@ function IDEInner() {
           />
 
           <div className="ide-editor-area">
+            <EditorToolbar
+              activeTab={activeTab}
+              runtimeId={activeRuntimeId}
+              runtime={activeRuntime}
+              agentState={agent.state}
+              saving={saving}
+              running={activeFileRunning}
+              onRun={handleRun}
+              onStop={handleStopRun}
+              onSave={handleSave}
+              onOpenAgent={() => setAgentDialogOpen(true)}
+            />
             {activeTab ? (
               <MonacoEditor
                 path={activeTab.path}
@@ -727,9 +1028,15 @@ function IDEInner() {
                   editorRef.current = editor;
                   monacoRef.current = monaco;
                   // Track cursor
-                  const ed = editor as { onDidChangeCursorPosition: (cb: (e: { position: { lineNumber: number; column: number } }) => void) => void };
+                  const ed = editor as {
+                    onDidChangeCursorPosition: (
+                      cb: (e: { position: { lineNumber: number; column: number } }) => void,
+                    ) => void;
+                  };
                   if (ed?.onDidChangeCursorPosition) {
-                    ed.onDidChangeCursorPosition((e) => setCursor({ line: e.position.lineNumber, col: e.position.column }));
+                    ed.onDidChangeCursorPosition((e) =>
+                      setCursor({ line: e.position.lineNumber, col: e.position.column }),
+                    );
                   }
                 }}
               />
@@ -740,23 +1047,33 @@ function IDEInner() {
                     Welcome to <span>NagarCode</span>
                   </h1>
                   <p>
-                    A desktop-first, keyboard-focused editor for the Nagar platform. Open a local folder to work with
-                    real files, or explore the demo workspace. Your edits survive tab switching and are saved through
-                    the workspace service.
+                    A desktop-first, keyboard-focused editor for the Nagar platform. Connect the
+                    loopback-only local agent to open a real folder, edit and save files on disk,
+                    run a real shell, and execute JavaScript, TypeScript, or Python on your
+                    computer. The demo workspace stays available without an agent.
                   </p>
 
                   <div className="ide-welcome-grid">
                     <div className="ide-welcome-tile">
                       <h4>Explorer</h4>
-                      <p>Open Folder, create, rename, delete. Right-click for context menus. Supports nested folders.</p>
+                      <p>
+                        Open Folder, create, rename, delete. Right-click for context menus. Supports
+                        nested folders.
+                      </p>
                     </div>
                     <div className="ide-welcome-tile">
                       <h4>Editor</h4>
-                      <p>Monaco with JS/TS/Python, folding, minimap, word wrap, themes, find &amp; replace (Ctrl+F).</p>
+                      <p>
+                        Monaco with JS/TS/Python, folding, minimap, word wrap, themes, find &amp;
+                        replace (Ctrl+F).
+                      </p>
                     </div>
                     <div className="ide-welcome-tile">
-                      <h4>Search</h4>
-                      <p>Local workspace search with regex, case and whole-word toggles. Service-based architecture.</p>
+                      <h4>Terminal &amp; Run</h4>
+                      <p>
+                        xterm.js connected to real processes on your machine: shells, interrupt,
+                        resize, scrollback, and a Run button for .js, .ts, and .py.
+                      </p>
                     </div>
                   </div>
 
@@ -769,8 +1086,7 @@ function IDEInner() {
                       onClick={() => {
                         if (!workspace) {
                           const mem = createDemoWorkspace();
-                          setWorkspace(mem);
-                          setWorkspaceName(mem.name);
+                          setBrowserWorkspace(mem);
                         }
                         openFile("/src/index.ts");
                       }}
@@ -784,13 +1100,25 @@ function IDEInner() {
 
                   {recent.length > 0 ? (
                     <div style={{ marginTop: 16 }}>
-                      <h4 style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase" }}>Recent</h4>
+                      <h4
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: "0.06em",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Recent
+                      </h4>
                       <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
                         {recent.slice(0, 6).map((p) => (
                           <button
                             key={p}
                             className="ide-secondary-btn"
-                            style={{ textAlign: "left", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
+                            style={{
+                              textAlign: "left",
+                              fontFamily: "ui-monospace, monospace",
+                              fontSize: 12,
+                            }}
                             onClick={() => openFile(p)}
                           >
                             {p}
@@ -801,16 +1129,48 @@ function IDEInner() {
                   ) : null}
 
                   <p className="ide-muted small" style={{ marginTop: 16 }}>
-                    Dark theme by default • File System Access API where supported, memory fallback otherwise • All
-                    panels are resizable • <a href="http://localhost:3000" target="_blank" rel="noreferrer">NagarHub</a>{" "}
-                    integration reserved for Phase 2.
+                    Dark theme by default • Local agent on 127.0.0.1 (token + origin checked) •
+                    Browser File System Access available as a fallback • All panels are resizable •{" "}
+                    <a href="http://localhost:3000" target="_blank" rel="noreferrer">
+                      NagarHub
+                    </a>{" "}
+                    and Git are out of scope in this phase.
                   </p>
                 </div>
               </div>
             )}
           </div>
 
-          <BottomPanel open={bottomOpen} onClose={() => setBottomOpen(false)} height={bottomHeight} onHeightChange={setBottomHeight} />
+          <BottomPanel
+            open={bottomOpen}
+            onClose={() => setBottomOpen(false)}
+            height={bottomHeight}
+            onHeightChange={setBottomHeight}
+            activeTab={bottomTab}
+            onTabChange={setBottomTab}
+            terminal={{
+              client: agent.client,
+              agentState: agent.state,
+              agentUrl: agent.config?.url ?? null,
+              workspaceName: agent.workspace?.name ?? null,
+              sessions: terminals.sessions,
+              activeId: terminals.activeId,
+              shells: agent.status?.shells ?? [],
+              ptyAvailable: agent.status?.ptyAvailable ?? false,
+              ...(agent.status?.ptyReason ? { ptyReason: agent.status.ptyReason } : {}),
+              creating: terminals.creating,
+              fontSize: settings.fontSize,
+              fontFamily: settings.fontFamily,
+              lightTheme: settings.theme === "nagar-light" || settings.theme === "vs-light",
+              onSelect: terminals.select,
+              onNew: handleNewTerminal,
+              onCloseSession: (id) => void terminals.closeTerminal(id),
+              onSessionStatus: terminals.updateSession,
+              onRefreshExplorer: refreshAll,
+              onOpenAgent: () => setAgentDialogOpen(true),
+              onReconnect: () => void agent.reconnect(),
+            }}
+          />
         </div>
       </div>
 
@@ -822,9 +1182,40 @@ function IDEInner() {
         onToggleBottom={() => setBottomOpen((v) => !v)}
         bottomOpen={bottomOpen}
         hasBottom
+        agentState={agent.state}
+        agentUrl={agent.config?.url ?? null}
+        agentWorkspaceRoot={agent.workspace?.root ?? null}
+        runtimes={agent.runtimes}
+        terminalsActive={
+          terminals.sessions.filter((session) => session.status === "running").length
+        }
+        onOpenAgent={() => setAgentDialogOpen(true)}
       />
 
-      <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} commands={commands} />
+      <CommandPalette
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        commands={commands}
+      />
+
+      <AgentDialog
+        open={agentDialogOpen}
+        onClose={() => setAgentDialogOpen(false)}
+        agent={agent}
+        initialPairing={pairing}
+        onOpenWorkspace={handleOpenAgentWorkspace}
+        onCloseWorkspace={async () => {
+          await agent.closeWorkspace();
+          leaveAgentWorkspace();
+        }}
+        onDisconnect={handleDisconnect}
+        onForget={handleForget}
+        onBrowserFallback={() => {
+          setAgentDialogOpen(false);
+          void openBrowserFolder();
+        }}
+        onShowTerminals={handleShowTerminals}
+      />
 
       {/* Settings updater for command palette toggles */}
       <SettingsUpdater />
@@ -833,7 +1224,10 @@ function IDEInner() {
         {toasts.map((t) => (
           <div key={t.id} className={`ide-toast ${t.kind}`}>
             <span>{t.message}</span>
-            <button className="ide-toast-close" onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}>
+            <button
+              className="ide-toast-close"
+              onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+            >
               ×
             </button>
           </div>
@@ -841,7 +1235,10 @@ function IDEInner() {
       </div>
 
       {modal ? (
-        <div className="ide-modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && setModal(null)}>
+        <div
+          className="ide-modal-overlay"
+          onMouseDown={(e) => e.target === e.currentTarget && setModal(null)}
+        >
           <div className="ide-modal" role="dialog" aria-modal="true">
             <h3>{modal.title}</h3>
             <p>{modal.message}</p>
@@ -868,7 +1265,14 @@ function PromptContent({
   modal,
   onCancel,
 }: {
-  modal: { type: "prompt"; title: string; message: string; placeholder?: string; defaultValue?: string; onConfirm: (v: string) => void };
+  modal: {
+    type: "prompt";
+    title: string;
+    message: string;
+    placeholder?: string;
+    defaultValue?: string;
+    onConfirm: (v: string) => void;
+  };
   onCancel: () => void;
 }) {
   const [val, setVal] = useState(modal.defaultValue ?? "");
@@ -891,7 +1295,11 @@ function PromptContent({
         <button className="ide-secondary-btn" onClick={onCancel}>
           Cancel
         </button>
-        <button className="ide-primary-btn" onClick={() => modal.onConfirm(val)} disabled={!val.trim()}>
+        <button
+          className="ide-primary-btn"
+          onClick={() => modal.onConfirm(val)}
+          disabled={!val.trim()}
+        >
           Create
         </button>
       </div>

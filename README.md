@@ -1,12 +1,14 @@
 # Nagar
 
-Nagar is a connected developer platform: **NagarHub** for Git hosting and collaboration, **NagarCode** for browser/cloud development, and **NagarDeploy** for deployments. Phases 0 (foundation), 1 (NagarHub core), and 2 (NagarHub collaboration) are implemented and have been run end to end against real PostgreSQL, Redis, and Git (see [Verification](#verification)). All three app shells share Nagar's Neo-brutalist design system; Code and Deploy workflows are still future phases.
+Nagar is a connected developer platform: **NagarHub** for Git hosting and collaboration, **NagarCode** for browser/cloud development, and **NagarDeploy** for deployments. Phases 0 (foundation), 1 (NagarHub core), and 2 (NagarHub collaboration) are implemented and have been run end to end against real PostgreSQL, Redis, and Git (see [Verification](#verification)). NagarCode now has its browser IDE and a loopback-only local development agent for real files, terminals, and JavaScript/TypeScript/Python execution. NagarDeploy is still a future phase.
 
 ## What works today
 
 **Foundation (Phase 0)** — pnpm + Turborepo monorepo, strict TypeScript, ESLint/Prettier, a shared UI package, PostgreSQL (Prisma) and Redis, Better Auth email/password sessions, a Fastify API with health/readiness endpoints, and a GitHub Actions pipeline.
 
 **NagarHub core (Phase 1)** — sign-up/sign-in, public profiles, public/private repositories, Git smart HTTP clone and push (Basic auth with your Nagar email and password), a file browser with safe README rendering, **paginated commit history per branch**, a **branches page** with each branch's tip commit, and binary/oversized-file handling.
+
+**NagarCode (IDE + local agent)** — Monaco editor with tabs, search, and settings; real folder access through the File System Access API or the local agent; explorer mutations (create, rename, delete, refresh); xterm.js terminals backed by real OS processes; and a Run button for JavaScript, TypeScript, and Python. The agent binds only to loopback, authenticates every request, validates browser origins and workspace-relative paths, and reports runtime availability. See [`docs/code/local-agent.md`](docs/code/local-agent.md) for install, start, pairing, shutdown, and the security model.
 
 **NagarHub collaboration (Phase 2)**
 
@@ -100,11 +102,14 @@ What that run could **not** cover, so you should check it in your environment: P
 ## Repository map
 
 - `apps/hub` — NagarHub account, profiles, repositories, commit history, branches, issues, labels, pull requests with diff review, organization screens, inbox, and access/webhook settings.
-- `apps/code`, `apps/deploy` — product landing shells using the shared Neo-brutalist system; product workflows are not implemented yet.
+- `apps/code` — NagarCode IDE: Monaco editor, tabs, explorer, search, settings, xterm.js terminal, and the local-agent client.
+- `apps/agent` — loopback-only Node.js agent that owns filesystem, terminal, and language-runtime operations.
+- `apps/deploy` — product landing shell using the shared Neo-brutalist system; deployment workflows are not implemented yet.
 - `services/api` — Fastify API, Better Auth integration, Git smart HTTP, collaboration, organization, notification, and webhook modules.
 - `packages/database` — Prisma schema and Phase 0/1/2 migrations.
 - `packages/auth` — shared Better Auth configuration backed by PostgreSQL.
 - `packages/types`, `packages/ui` — shared contracts, brand components, and Neo-brutalist stylesheet.
 - `.github/workflows` — CI: format, lint, migrate, typecheck, test, build against PostgreSQL and Redis services.
 - `docs/api`, `docs/architecture`, `docs/decisions` — endpoint reference, architecture, and ADRs.
+- `docs/code/local-agent.md` — NagarCode local agent setup, security model, and limitations.
 - `PROJECT.md` — current phase checklist and project status.

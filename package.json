@@ -9,6 +9,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@homebridge/node-pty-prebuilt-multiarch",
       "@prisma/client",
       "@prisma/engines",
       "esbuild",
@@ -28,7 +29,10 @@
     "db:deploy": "dotenv -e .env -- pnpm --filter @nagar/database run db:deploy",
     "db:studio": "dotenv -e .env -- pnpm --filter @nagar/database run db:studio",
     "infra:up": "docker compose up -d postgres redis",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "agent": "pnpm --filter @nagar/agent dev",
+    "agent:build": "pnpm --filter @nagar/agent build",
+    "agent:start": "pnpm --filter @nagar/agent start"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

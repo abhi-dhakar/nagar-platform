@@ -20,7 +20,9 @@ export function Placeholder({
       <p className="ide-placeholder-desc">{description}</p>
       {hint ? <p className="ide-placeholder-hint">{hint}</p> : null}
       {action ? <div className="ide-placeholder-action">{action}</div> : null}
-      <p className="ide-placeholder-foot">This panel is reserved for a future phase. No mock data is shown as real.</p>
+      <p className="ide-placeholder-foot">
+        This panel is reserved for a future phase. No mock data is shown as real.
+      </p>
     </div>
   );
 }

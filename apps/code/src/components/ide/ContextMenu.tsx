@@ -53,7 +53,13 @@ export function ContextMenu({
   };
 
   return (
-    <div ref={ref} className="ide-context-menu" style={style} role="menu" onContextMenu={(e) => e.preventDefault()}>
+    <div
+      ref={ref}
+      className="ide-context-menu"
+      style={style}
+      role="menu"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {items.map((item, idx) => {
         if (isSeparator(item)) {
           return <div key={`sep-${idx}`} className="ide-context-sep" />;

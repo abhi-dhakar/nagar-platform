@@ -1,0 +1,32 @@
+{
+  "name": "@nagar/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "NagarCode local development agent — loopback-only filesystem, terminal, and runtime access.",
+  "bin": {
+    "nagar-agent": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "dev:watch": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "lint": "eslint src test",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node test/run.mjs"
+  },
+  "dependencies": {
+    "@nagar/agent-protocol": "workspace:*",
+    "typescript": "~5.9.3",
+    "ws": "^8.22.0"
+  },
+  "optionalDependencies": {
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.6"
+  }
+}

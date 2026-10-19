@@ -146,7 +146,11 @@ export class MemoryWorkspace implements WorkspaceService {
         const raw = window.localStorage.getItem(STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw) as Record<string, string>;
-          if (parsed && typeof parsed === "object" && (parsed as Record<string, unknown>).__type !== "tree") {
+          if (
+            parsed &&
+            typeof parsed === "object" &&
+            (parsed as Record<string, unknown>).__type !== "tree"
+          ) {
             // flat map fallback
           }
         }

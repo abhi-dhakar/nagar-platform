@@ -126,7 +126,11 @@ export function IconFolder(props: SVGProps<SVGSVGElement> & { open?: boolean }) 
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} {...rest}>
       <path
-        d={open ? "M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v2H3V7Z" : "M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"}
+        d={
+          open
+            ? "M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v2H3V7Z"
+            : "M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"
+        }
       />
       {open ? <path d="M3 11v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6H3Z" opacity={0.7} /> : null}
     </svg>
@@ -152,6 +156,43 @@ export function IconEdit(props: SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} {...props}>
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+    </svg>
+  );
+}
+
+export function IconPlay(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" {...props}>
+      <path d="M8 5.5v13a1 1 0 0 0 1.53.85l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5Z" />
+    </svg>
+  );
+}
+export function IconStop(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" {...props}>
+      <rect x={6} y={6} width={12} height={12} rx={2} />
+    </svg>
+  );
+}
+export function IconSave(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} {...props}>
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+      <path d="M17 21v-8H7v8M7 3v5h8" />
+    </svg>
+  );
+}
+export function IconPlus(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+export function IconPlug(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} {...props}>
+      <path d="M9 2v6M15 2v6M6 8h12M8 8v3a4 4 0 0 0 8 0V8M12 15v7" />
     </svg>
   );
 }
