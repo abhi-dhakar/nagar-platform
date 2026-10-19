@@ -4,7 +4,12 @@ import { IconExplorer, IconGit, IconHub, IconSearch, IconSettings } from "./Icon
 
 export type ActivityId = "explorer" | "search" | "scm" | "nagarhub" | "settings";
 
-const items: { id: ActivityId; label: string; shortcut?: string; Icon: React.ComponentType<{ width?: number; height?: number; className?: string }> }[] = [
+const items: {
+  id: ActivityId;
+  label: string;
+  shortcut?: string;
+  Icon: React.ComponentType<{ width?: number; height?: number; className?: string }>;
+}[] = [
   { id: "explorer", label: "Explorer", shortcut: "Ctrl+Shift+E", Icon: IconExplorer },
   { id: "search", label: "Search", shortcut: "Ctrl+Shift+F", Icon: IconSearch },
   { id: "scm", label: "Source Control", Icon: IconGit },
@@ -46,7 +51,10 @@ export function ActivityBar({
       </div>
 
       <div className="ide-activity-bottom">
-        <div className="ide-activity-account" title="Nagar account — single identity across Hub, Code & Deploy">
+        <div
+          className="ide-activity-account"
+          title="Nagar account — single identity across Hub, Code & Deploy"
+        >
           <span className="ide-account-avatar">A</span>
         </div>
       </div>

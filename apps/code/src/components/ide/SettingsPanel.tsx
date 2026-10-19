@@ -31,7 +31,9 @@ export function SettingsPanel() {
                 </option>
               ))}
             </select>
-            <span className="ide-field-hint">Nagar Dark is the default. Changes apply instantly to the editor.</span>
+            <span className="ide-field-hint">
+              Nagar Dark is the default. Changes apply instantly to the editor.
+            </span>
           </label>
 
           <label className="ide-field">
@@ -56,7 +58,9 @@ export function SettingsPanel() {
               value={settings.fontFamily}
               onChange={(e) => update({ fontFamily: e.target.value })}
             />
-            <span className="ide-field-hint">Monospace stack used by Monaco. Reload is not required.</span>
+            <span className="ide-field-hint">
+              Monospace stack used by Monaco. Reload is not required.
+            </span>
           </label>
         </section>
 
@@ -127,7 +131,8 @@ export function SettingsPanel() {
               <span>Save file</span>
             </div>
             <div className="ide-kbd-row">
-              <span className="ide-kbd">Ctrl</span> + <span className="ide-kbd">⇧</span> + <span className="ide-kbd">P</span>
+              <span className="ide-kbd">Ctrl</span> + <span className="ide-kbd">⇧</span> +{" "}
+              <span className="ide-kbd">P</span>
               <span>Command palette</span>
             </div>
             <div className="ide-kbd-row">
@@ -146,8 +151,8 @@ export function SettingsPanel() {
         </section>
 
         <p className="ide-muted small">
-          Settings persist in <code>localStorage</code> under <code>nagarcode:settings:v1</code>. They are applied via
-          the Monaco options API — no server round-trip.
+          Settings persist in <code>localStorage</code> under <code>nagarcode:settings:v1</code>.
+          They are applied via the Monaco options API — no server round-trip.
         </p>
       </div>
     </div>

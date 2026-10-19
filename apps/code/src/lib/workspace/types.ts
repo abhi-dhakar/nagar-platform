@@ -9,10 +9,7 @@ export type WorkspaceEntry = {
 export type FileSystemDirectoryHandleLike = {
   kind: "directory";
   name: string;
-  getFileHandle(
-    name: string,
-    opts?: { create?: boolean },
-  ): Promise<FileSystemFileHandleLike>;
+  getFileHandle(name: string, opts?: { create?: boolean }): Promise<FileSystemFileHandleLike>;
   getDirectoryHandle(
     name: string,
     opts?: { create?: boolean },
@@ -32,9 +29,7 @@ export type FileSystemFileHandleLike = {
   createWritable(): Promise<FileSystemWritableFileStreamLike>;
 };
 
-export type FileSystemHandleLike =
-  | FileSystemDirectoryHandleLike
-  | FileSystemFileHandleLike;
+export type FileSystemHandleLike = FileSystemDirectoryHandleLike | FileSystemFileHandleLike;
 
 export type FileSystemWritableFileStreamLike = {
   write(data: string | BufferSource | Blob): Promise<void>;
@@ -63,11 +58,7 @@ export interface WorkspaceService {
 }
 
 export type WorkspaceErrorCode =
-  | "NOT_FOUND"
-  | "ALREADY_EXISTS"
-  | "PERMISSION_DENIED"
-  | "NOT_SUPPORTED"
-  | "UNKNOWN";
+  "NOT_FOUND" | "ALREADY_EXISTS" | "PERMISSION_DENIED" | "NOT_SUPPORTED" | "UNKNOWN";
 
 export class WorkspaceError extends Error {
   code: WorkspaceErrorCode;

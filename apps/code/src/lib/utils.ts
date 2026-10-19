@@ -2,7 +2,12 @@ export function getLanguageFromPath(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   const lower = path.toLowerCase();
   if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
-  if (lower.endsWith(".js") || lower.endsWith(".jsx") || lower.endsWith(".mjs") || lower.endsWith(".cjs"))
+  if (
+    lower.endsWith(".js") ||
+    lower.endsWith(".jsx") ||
+    lower.endsWith(".mjs") ||
+    lower.endsWith(".cjs")
+  )
     return "javascript";
   if (ext === "py" || ext === "pyw") return "python";
   if (ext === "json") return "json";
@@ -23,7 +28,10 @@ export function getLanguageFromPath(path: string): string {
   return "plaintext";
 }
 
-export function getFileIcon(path: string, kind: "file" | "directory" = "file"): { icon: string; color: string } {
+export function getFileIcon(
+  path: string,
+  kind: "file" | "directory" = "file",
+): { icon: string; color: string } {
   if (kind === "directory") return { icon: "📁", color: "#7aa2ff" };
   const lower = path.toLowerCase();
   if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return { icon: "TS", color: "#3178c6" };

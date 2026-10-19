@@ -13,13 +13,27 @@ type Props = {
   onToggle: (path: string) => void;
   onSelect: (entry: WorkspaceEntry) => void;
   onRefresh: () => void;
-  onContextAction: (action: string, targetPath: string | null, targetKind?: "file" | "directory") => void;
+  onContextAction: (
+    action: string,
+    targetPath: string | null,
+    targetKind?: "file" | "directory",
+  ) => void;
 };
 
-export function FileTree({ workspace, expanded, selectedPath, onToggle, onSelect, onContextAction }: Props) {
-  const [ctx, setCtx] = useState<{ x: number; y: number; path: string | null; kind?: "file" | "directory" } | null>(
-    null,
-  );
+export function FileTree({
+  workspace,
+  expanded,
+  selectedPath,
+  onToggle,
+  onSelect,
+  onContextAction,
+}: Props) {
+  const [ctx, setCtx] = useState<{
+    x: number;
+    y: number;
+    path: string | null;
+    kind?: "file" | "directory";
+  } | null>(null);
 
   if (!workspace) {
     return <div className="ide-tree-empty">No folder opened</div>;
@@ -108,7 +122,12 @@ function TreeLevel({
   selectedPath: string | null;
   onToggle: (p: string) => void;
   onSelect: (e: WorkspaceEntry) => void;
-  onContext: (c: { x: number; y: number; path: string | null; kind?: "file" | "directory" }) => void;
+  onContext: (c: {
+    x: number;
+    y: number;
+    path: string | null;
+    kind?: "file" | "directory";
+  }) => void;
 }) {
   const [entries, setEntries] = useState<WorkspaceEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +177,9 @@ function TreeLevel({
   }
   if (!entries || entries.length === 0) {
     if (depth === 0) {
-      return <div className="ide-tree-empty">This folder is empty. Right-click to create a file.</div>;
+      return (
+        <div className="ide-tree-empty">This folder is empty. Right-click to create a file.</div>
+      );
     }
     return null;
   }
@@ -196,7 +217,11 @@ function TreeLevel({
               }}
             >
               <span className="ide-tree-chevron">
-                {isDir ? <IconChevron open={isExpanded} width={12} height={12} /> : <span style={{ width: 12 }} />}
+                {isDir ? (
+                  <IconChevron open={isExpanded} width={12} height={12} />
+                ) : (
+                  <span style={{ width: 12 }} />
+                )}
               </span>
               <span className="ide-tree-icon" style={{ color: icon.color }} aria-hidden="true">
                 {isDir ? (

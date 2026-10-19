@@ -90,14 +90,18 @@ export function Explorer({
           <div className="ide-tip">
             <div className="ide-tip-head">
               <strong>Browser tip</strong>
-              <button className="ide-tip-close" onClick={() => setShowTip(false)} aria-label="Dismiss">
+              <button
+                className="ide-tip-close"
+                onClick={() => setShowTip(false)}
+                aria-label="Dismiss"
+              >
                 ×
               </button>
             </div>
             <p>
-              Your browser doesn&apos;t support the File System Access API. NagarCode will use an in-memory
-              workspace that persists in this tab. For full local file access, open in Chrome or Edge and use{" "}
-              <em>Open Folder</em>.
+              Your browser doesn&apos;t support the File System Access API. NagarCode will use an
+              in-memory workspace that persists in this tab. For full local file access, open in
+              Chrome or Edge and use <em>Open Folder</em>.
             </p>
           </div>
         ) : null}
@@ -119,7 +123,8 @@ export function Explorer({
             <div className="ide-empty-icon">◰</div>
             <h3>No folder opened</h3>
             <p>
-              Open a local folder to edit real files, or stay in the demo workspace and create files in memory.
+              Open a local folder to edit real files, or stay in the demo workspace and create files
+              in memory.
             </p>
             <button className="ide-primary-btn" onClick={onOpenFolder}>
               Open Folder…
@@ -134,7 +139,8 @@ export function Explorer({
                 <span className="ide-kbd">Ctrl</span> + <span className="ide-kbd">S</span> to save
               </li>
               <li>
-                <span className="ide-kbd">Ctrl</span> + <span className="ide-kbd">⇧</span> + <span className="ide-kbd">P</span> commands
+                <span className="ide-kbd">Ctrl</span> + <span className="ide-kbd">⇧</span> +{" "}
+                <span className="ide-kbd">P</span> commands
               </li>
               <li>Right-click for file actions</li>
             </ul>
